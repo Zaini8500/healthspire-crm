@@ -1,5 +1,7 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import Task from "../models/Task.js";
+import Invoice from "../models/Invoice.js";
 
 const router = Router();
 
@@ -8,8 +10,20 @@ router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const projectId = req.query.projectId?.toString();
+    const invoiceIdQ = req.query.invoiceId?.toString();
     const filter = {};
     if (projectId) filter.projectId = projectId;
+    if (invoiceIdQ) {
+      let invId = null;
+      if (mongoose.Types.ObjectId.isValid(invoiceIdQ)) {
+        invId = invoiceIdQ;
+      } else {
+        // Try to resolve by invoice number
+        const inv = await Invoice.findOne({ number: invoiceIdQ }).select("_id").lean();
+        if (inv) invId = String(inv._id);
+      }
+      if (invId) filter.invoiceId = invId;
+    }
     if (q) {
       Object.assign(filter, {
         $or: [

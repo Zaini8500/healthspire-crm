@@ -187,14 +187,14 @@ export default function Overview() {
                   </div>
                   <div className="space-y-1">
                     <Label>Client</Label>
-                    <Select value={client} onValueChange={setClient}>
+                    <Select value={clientIdSel} onValueChange={(v)=>{ setClientIdSel(v); const opt = clientOptions.find(o=>o.id===v); setClient(opt?.name || ""); }}>
                       <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                       <SelectContent>
                         {clientOptions.length === 0 ? (
-                          <SelectItem value="" disabled>No clients</SelectItem>
+                          <SelectItem value="__no_clients__" disabled>No clients</SelectItem>
                         ) : (
-                          clientOptions.map((n)=> (
-                            <SelectItem key={n} value={n}>{n}</SelectItem>
+                          clientOptions.map((opt)=> (
+                            <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
                           ))
                         )}
                       </SelectContent>
@@ -273,9 +273,9 @@ export default function Overview() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((r) => (
+            {filtered.map((r, idx) => (
               <TableRow key={r.id}>
-                <TableCell>{r.id}</TableCell>
+                <TableCell>{idx + 1}</TableCell>
                 <TableCell className="text-primary underline cursor-pointer" onClick={() => navigate(`/projects/${r.id}`)}>{r.title}</TableCell>
                 <TableCell className="text-primary cursor-pointer" onClick={() => r.clientId && navigate(`/clients/${r.clientId}`)}>{r.client}</TableCell>
                 <TableCell>{r.price}</TableCell>

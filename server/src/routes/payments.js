@@ -8,8 +8,10 @@ router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const clientId = req.query.clientId?.toString();
+    const invoiceId = req.query.invoiceId?.toString();
     const filter = {};
     if (clientId) filter.clientId = clientId;
+    if (invoiceId) filter.invoiceId = invoiceId;
     if (q) {
       Object.assign(filter, {
         $or: [
@@ -28,7 +30,7 @@ router.get("/", async (req, res) => {
 // Create payment
 router.post("/", async (req, res) => {
   try {
-    const doc = await Payment.create(req.body || {});
+    const doc = await Payment.create(req.body);
     res.status(201).json(doc);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -49,8 +51,8 @@ router.put("/:id", async (req, res) => {
 // Delete payment
 router.delete("/:id", async (req, res) => {
   try {
-    const r = await Payment.findByIdAndDelete(req.params.id);
-    if (!r) return res.status(404).json({ error: "Not found" });
+    const doc = await Payment.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Not found" });
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });

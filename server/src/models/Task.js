@@ -10,6 +10,7 @@ const AssigneeSchema = new mongoose.Schema(
 
 const TaskSchema = new mongoose.Schema(
   {
+    invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     projectTitle: { type: String, default: "" },
     title: { type: String, required: true },

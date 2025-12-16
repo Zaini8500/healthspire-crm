@@ -61,6 +61,8 @@ import Timeline from "./pages/projects/Timeline";
 import ProjectDashboard from "./pages/projects/ProjectDashboard";
 import Chat from "./pages/messages/Chat";
 import InvoiceList from "./pages/invoices/InvoiceList";
+import InvoiceDetailPage from "./pages/invoices/InvoiceDetailPage";
+import InvoicePreview from "./pages/invoices/InvoicePreview";
 import NotFound from "./pages/NotFound";
 import AuthLayout from "./pages/auth/AuthLayout";
 
@@ -146,6 +148,8 @@ const App = () => (
             <Route path="/help-support/knowledge-base/categories" element={<KnowledgeBaseCategories />} />
             {/* Invoices */}
             <Route path="/invoices" element={<InvoiceList />} />
+            <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
+            <Route path="/invoices/:id/preview" element={<InvoicePreview />} />
             {/* Reports */}
             <Route path="/reports" element={<InvoicesSummary />} />
             <Route path="/reports/sales/invoices-summary" element={<InvoicesSummary />} />
