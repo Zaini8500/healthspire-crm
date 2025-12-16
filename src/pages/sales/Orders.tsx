@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,28 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Calendar, RefreshCw, Search, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+const API_BASE = "http://localhost:5000";
 
 export default function Orders() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("-");
   const [pageSize, setPageSize] = useState("10");
   const [openAdd, setOpenAdd] = useState(false);
+  const [orders, setOrders] = useState<any[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const url = `${API_BASE}/api/orders${query ? `?q=${encodeURIComponent(query)}` : ""}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        setOrders(await res.json());
+      } catch {}
+    })();
+  }, [query]);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -80,9 +96,23 @@ export default function Orders() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">No record found.</TableCell>
-              </TableRow>
+              {orders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              ) : (
+                orders.map((o:any)=> (
+                  <TableRow key={String(o._id)} className="cursor-pointer" onClick={()=>navigate(`/sales/orders/${o._id}`)}>
+                    <TableCell className="text-primary underline" onClick={(e)=>{ e.stopPropagation(); navigate(`/sales/orders/${o._id}`); }}>{o.number || "ORDER"}</TableCell>
+                    <TableCell>{o.client || "-"}</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>{o.orderDate ? new Date(o.orderDate).toISOString().slice(0,10) : "-"}</TableCell>
+                    <TableCell>Rs.{Number(o.amount||0).toLocaleString()}</TableCell>
+                    <TableCell>{o.status || "new"}</TableCell>
+                    <TableCell className="text-right">✎</TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
 

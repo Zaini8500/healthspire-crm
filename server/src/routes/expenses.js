@@ -6,8 +6,12 @@ const router = Router();
 router.get("/", async (req, res) => {
   const q = req.query.q?.toString().trim();
   const employeeId = req.query.employeeId?.toString();
+  const clientId = req.query.clientId?.toString();
+  const projectId = req.query.projectId?.toString();
   const filter = {};
   if (employeeId) filter.employeeId = employeeId;
+  if (clientId) filter.clientId = clientId;
+  if (projectId) filter.projectId = projectId;
   if (q) filter.$or = [
     { title: { $regex: q, $options: "i" } },
     { category: { $regex: q, $options: "i" } },

@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 const ExpenseSchema = new mongoose.Schema(
   {
     employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },
+    clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     date: { type: Date },
     category: { type: String, default: "" },
     title: { type: String, default: "" },
