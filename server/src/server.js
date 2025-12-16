@@ -29,6 +29,7 @@ import contractsRouter from "./routes/contracts.js";
 import proposalsRouter from "./routes/proposals.js";
 import ticketsRouter from "./routes/tickets.js";
 import eventsApiRouter from "./routes/events.js";
+import itemsRouter from "./routes/items.js";
 import estimateRequestsRouter from "./routes/estimateRequests.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
 import authRouter from "./routes/auth.js";
@@ -45,7 +46,7 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/mindsp
 app.use(cors());
 // Enable CORS preflight for all routes
 app.options("*", cors());
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
 app.use(morgan("dev"));
 // Disable etag and caching for API to prevent 304 interfering with fetch()
 app.set("etag", false);
@@ -84,6 +85,7 @@ app.use("/api/estimates", estimatesRouter);
 app.use("/api/invoices", invoicesRouter);
 app.use("/api/payments", paymentsRouter);
 app.use("/api/orders", ordersRouter);
+app.use("/api/items", itemsRouter);
 app.use("/api/contracts", contractsRouter);
 app.use("/api/proposals", proposalsRouter);
 app.use("/api/tickets", ticketsRouter);

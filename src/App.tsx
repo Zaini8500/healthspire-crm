@@ -24,6 +24,8 @@ import Announcements from "./pages/announcements/Announcements";
 import Subscriptions from "./pages/subscriptions/Subscriptions";
 import Orders from "./pages/sales/Orders";
 import Store from "./pages/sales/Store";
+import Checkout from "./pages/sales/Checkout";
+import OrderDetailPage from "./pages/sales/OrderDetailPage";
 import Payments from "./pages/sales/Payments";
 import Items from "./pages/sales/Items";
 import Contracts from "./pages/sales/Contracts";
@@ -119,7 +121,9 @@ const App = () => (
             <Route path="/subscriptions" element={<Subscriptions />} />
             {/* Sales */}
             <Route path="/sales/orders" element={<Orders />} />
+            <Route path="/sales/orders/:id" element={<OrderDetailPage />} />
             <Route path="/sales/store" element={<Store />} />
+            <Route path="/sales/checkout" element={<Checkout />} />
             <Route path="/sales/payments" element={<Payments />} />
             <Route path="/sales/expenses" element={<Expenses />} />
             <Route path="/sales/items" element={<Items />} />

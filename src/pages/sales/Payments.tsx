@@ -7,6 +7,41 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { RefreshCw, Search, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
+
+const API_BASE = "http://localhost:5000";
+
+interface Invoice {
+  _id: string;
+  number: string;
+  clientId?: string;
+  client?: string;
+  amount?: number;
+}
+
+interface Payment {
+  _id: string;
+  invoiceId?: string;
+  clientId?: string;
+  client?: string;
+  amount?: number;
+  method?: string;
+  date?: string;
+  note?: string;
+}
+
+const fmtDate = (d?: string) => {
+  if (!d) return "-";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "-";
+  return dt.toISOString().slice(0, 10);
+};
+
+const csvEscape = (v: any) => {
+  const s = String(v ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 export default function Payments() {
   const [tab, setTab] = useState("list");
@@ -16,6 +51,18 @@ export default function Payments() {
   const [project, setProject] = useState("-");
   const [openAdd, setOpenAdd] = useState(false);
   const [year, setYear] = useState(2025);
+
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [addInvoiceId, setAddInvoiceId] = useState<string>("");
+  const [addDate, setAddDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [addMethod, setAddMethod] = useState<string>("Bank Transfer");
+  const [addAmount, setAddAmount] = useState<string>("");
+  const [addNote, setAddNote] = useState<string>("");
+
+  const navigate = useNavigate();
 
   // Chart data (demo)
   const chartMonths = [
@@ -48,6 +95,223 @@ export default function Payments() {
     };
   }, [year, currency]);
 
+  const loadPayments = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      const url = `${API_BASE}/api/payments${params.toString() ? `?${params.toString()}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      setPayments(Array.isArray(data) ? data : []);
+    } catch {}
+    finally {
+      setLoading(false);
+    }
+  };
+
+  const loadInvoices = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/invoices`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setInvoices(Array.isArray(data) ? data : []);
+    } catch {}
+  };
+
+  const exportExcel = () => {
+    if (!payments.length) {
+      toast({ title: "No data", description: "No payments to export", variant: "destructive" });
+      return;
+    }
+    const rows = payments.map((p) => {
+      const inv = p.invoiceId ? invoiceById.get(String(p.invoiceId)) : undefined;
+      const invoiceNumber = inv?.number || p.invoiceId || "";
+      const client = p.client || inv?.client || "";
+      return {
+        invoice: invoiceNumber,
+        client,
+        date: fmtDate(p.date),
+        method: p.method || "",
+        note: p.note || "",
+        amount: Number(p.amount || 0),
+      };
+    });
+
+    const header = ["Invoice", "Client", "Payment Date", "Method", "Note", "Amount"];
+    const lines = [
+      header.map(csvEscape).join(","),
+      ...rows.map((r) => [r.invoice, r.client, r.date, r.method, r.note, r.amount].map(csvEscape).join(",")),
+      ["", "", "", "", "Total", totalAmount].map(csvEscape).join(","),
+    ];
+
+    const csv = `\uFEFF${lines.join("\n")}`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payments_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printPayments = () => {
+    if (!payments.length) {
+      toast({ title: "No data", description: "No payments to print", variant: "destructive" });
+      return;
+    }
+
+    const rowsHtml = payments
+      .map((p) => {
+        const inv = p.invoiceId ? invoiceById.get(String(p.invoiceId)) : undefined;
+        const invoiceNumber = inv?.number || p.invoiceId || "-";
+        const client = p.client || inv?.client || "-";
+        const date = fmtDate(p.date);
+        const method = p.method || "-";
+        const note = p.note || "—";
+        const amount = `Rs.${Number(p.amount || 0).toLocaleString()}`;
+        return `<tr><td>${invoiceNumber}</td><td>${client}</td><td>${date}</td><td>${method}</td><td>${note}</td><td style="text-align:right">${amount}</td></tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Payments</title>
+    <style>
+      body{font-family:Arial, Helvetica, sans-serif; padding:24px; color:#111;}
+      h1{font-size:18px; margin:0 0 12px 0;}
+      .meta{font-size:12px; color:#444; margin-bottom:16px;}
+      table{width:100%; border-collapse:collapse; font-size:12px;}
+      th,td{border:1px solid #ddd; padding:8px; vertical-align:top;}
+      th{background:#f5f5f5; text-align:left;}
+      tfoot td{font-weight:bold;}
+    </style>
+  </head>
+  <body>
+    <h1>Payments</h1>
+    <div class="meta">Generated: ${new Date().toLocaleString()}</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Invoice</th>
+          <th>Client</th>
+          <th>Payment date</th>
+          <th>Method</th>
+          <th>Note</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" style="text-align:right">Total</td>
+          <td style="text-align:right">Rs.${Number(totalAmount || 0).toLocaleString()}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </body>
+</html>
+<script>
+  window.onload = function () {
+    try { window.focus(); } catch (e) {}
+    try { window.print(); } catch (e) {}
+  };
+</script>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
+  useEffect(() => {
+    loadInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  useEffect(() => {
+    if (!openAdd) return;
+    loadInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAdd]);
+
+  const selectedInvoice = useMemo(
+    () => invoices.find((i) => String(i._id) === String(addInvoiceId)),
+    [invoices, addInvoiceId]
+  );
+
+  const invoiceById = useMemo(() => {
+    const m = new Map<string, Invoice>();
+    for (const inv of invoices) m.set(String(inv._id), inv);
+    return m;
+  }, [invoices]);
+
+  const totalAmount = useMemo(
+    () => (payments || []).reduce((s, p) => s + Number(p.amount || 0), 0),
+    [payments]
+  );
+
+  const savePayment = async () => {
+    if (!addInvoiceId) {
+      toast({ title: "Missing invoice", description: "Please select an invoice", variant: "destructive" });
+      return;
+    }
+    const amt = Number(addAmount || 0);
+    if (!amt || amt <= 0) {
+      toast({ title: "Invalid amount", description: "Please enter a valid amount", variant: "destructive" });
+      return;
+    }
+    try {
+      const payload: any = {
+        invoiceId: addInvoiceId,
+        clientId: selectedInvoice?.clientId,
+        client: selectedInvoice?.client || "",
+        amount: amt,
+        method: addMethod || "Cash",
+        date: addDate ? new Date(addDate) : new Date(),
+        note: addNote,
+      };
+      const res = await fetch(`${API_BASE}/api/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        let msg = "Failed to save payment";
+        try {
+          const err = await res.json();
+          if (err?.error) msg = String(err.error);
+        } catch {}
+        toast({ title: "Save failed", description: msg, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Saved", description: "Payment saved successfully" });
+      setOpenAdd(false);
+      setAddInvoiceId("");
+      setAddAmount("");
+      setAddNote("");
+      setAddMethod("Bank Transfer");
+      setAddDate(new Date().toISOString().slice(0, 10));
+      loadPayments();
+    } catch {}
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -64,17 +328,30 @@ export default function Payments() {
           <DialogTrigger asChild>
             <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-2"/>Add payment</Button>
           </DialogTrigger>
-          <DialogContent className="bg-card">
+          <DialogContent className="bg-card" aria-describedby={undefined}>
             <DialogHeader><DialogTitle>Add payment</DialogTitle></DialogHeader>
             <div className="grid gap-3">
-              <div className="space-y-1"><label className="text-sm">Invoice ID</label><Input placeholder="INVOICE #..."/></div>
-              <div className="space-y-1"><label className="text-sm">Payment date</label><Input type="date"/></div>
-              <div className="space-y-1"><label className="text-sm">Payment method</label><Input placeholder="Bank Transfer"/></div>
-              <div className="space-y-1"><label className="text-sm">Amount</label><Input placeholder="0.00"/></div>
+              <div className="space-y-1">
+                <label className="text-sm">Invoice</label>
+                <Select value={addInvoiceId} onValueChange={setAddInvoiceId}>
+                  <SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger>
+                  <SelectContent>
+                    {invoices.map((inv) => (
+                      <SelectItem key={String(inv._id)} value={String(inv._id)}>
+                        {inv.number} {inv.client ? `- ${inv.client}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1"><label className="text-sm">Payment date</label><Input type="date" value={addDate} onChange={(e)=>setAddDate(e.target.value)} /></div>
+              <div className="space-y-1"><label className="text-sm">Payment method</label><Input placeholder="Bank Transfer" value={addMethod} onChange={(e)=>setAddMethod(e.target.value)} /></div>
+              <div className="space-y-1"><label className="text-sm">Amount</label><Input placeholder="0.00" value={addAmount} onChange={(e)=>setAddAmount(e.target.value)} /></div>
+              <div className="space-y-1"><label className="text-sm">Note</label><Input placeholder="-" value={addNote} onChange={(e)=>setAddNote(e.target.value)} /></div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={()=>setOpenAdd(false)}>Close</Button>
-              <Button onClick={()=>setOpenAdd(false)}>Save</Button>
+              <Button onClick={savePayment}>Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -107,11 +384,11 @@ export default function Payments() {
               <Button variant="outline">Custom</Button>
               <Button variant="outline">Dynamic</Button>
               <Button variant="outline">December 2025</Button>
-              <Button variant="success" size="icon"><RefreshCw className="w-4 h-4"/></Button>
+              <Button variant="success" size="icon" onClick={loadPayments} disabled={loading}><RefreshCw className="w-4 h-4"/></Button>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">Excel</Button>
-              <Button variant="outline" size="sm">Print</Button>
+              <Button type="button" variant="outline" size="sm" onClick={exportExcel}>Excel</Button>
+              <Button type="button" variant="outline" size="sm" onClick={printPayments}>Print</Button>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input placeholder="Search" value={query} onChange={(e)=>setQuery(e.target.value)} className="pl-9 w-56" />
@@ -134,17 +411,26 @@ export default function Payments() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      <TableRow>
-                        <TableCell className="text-primary underline cursor-pointer">INVOICE #20251244</TableCell>
-                        <TableCell>2025-12-06</TableCell>
-                        <TableCell>Bank Transfer</TableCell>
-                        <TableCell>—</TableCell>
-                        <TableCell>Rs.30,000</TableCell>
-                      </TableRow>
+                      {payments.map((p) => (
+                        <TableRow key={String(p._id)}>
+                          <TableCell
+                            className="text-primary underline cursor-pointer"
+                            onClick={() => {
+                              if (p.invoiceId) navigate(`/invoices/${p.invoiceId}`);
+                            }}
+                          >
+                            {p.invoiceId ? (invoiceById.get(String(p.invoiceId))?.number || p.invoiceId) : "-"}
+                          </TableCell>
+                          <TableCell>{fmtDate(p.date)}</TableCell>
+                          <TableCell>{p.method || "-"}</TableCell>
+                          <TableCell>{p.note || "—"}</TableCell>
+                          <TableCell>Rs.{Number(p.amount || 0).toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
                       <TableRow>
                         <TableCell className="font-medium">Total</TableCell>
                         <TableCell colSpan={3}></TableCell>
-                        <TableCell className="font-semibold">Rs.30,000</TableCell>
+                        <TableCell className="font-semibold">Rs.{totalAmount.toLocaleString()}</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>

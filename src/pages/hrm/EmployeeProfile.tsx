@@ -1236,7 +1236,7 @@ export default function EmployeeProfile() {
                               </div>
                               <div>
                                 <Label>Tax2</Label>
-                                <Input value={expenseForm.tax2} onChange={(e)=>setExpenseForm({...expenseForm, tax: e.target.value})} />
+                                <Input value={expenseForm.tax2} onChange={(e)=>setExpenseForm({...expenseForm, tax2: e.target.value})} />
                               </div>
                             </div>
                             <DialogFooter>

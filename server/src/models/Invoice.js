@@ -9,6 +9,16 @@ const InvoiceSchema = new mongoose.Schema(
     status: { type: String, default: "Unpaid" },
     issueDate: { type: Date },
     dueDate: { type: Date },
+    // Line items
+    items: [
+      {
+        name: { type: String, default: "" },
+        quantity: { type: Number, default: 1 },
+        rate: { type: Number, default: 0 },
+        taxable: { type: Boolean, default: false },
+        total: { type: Number, default: 0 },
+      },
+    ],
     // Optional associations and meta
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     project: { type: String, default: "" },
