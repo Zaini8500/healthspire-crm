@@ -56,9 +56,10 @@ import KnowledgeBaseArticles from "./pages/help-support/knowledge-base/Articles"
 import KnowledgeBaseCategories from "./pages/help-support/knowledge-base/Categories";
 import CalendarPage from "./pages/calendar/Calendar";
 import Overview from "./pages/projects/Overview";
-import Kanban from "./pages/projects/Kanban";
+
 import Timeline from "./pages/projects/Timeline";
 import ProjectDashboard from "./pages/projects/ProjectDashboard";
+import ProjectOverviewPage from "./pages/projects/ProjectOverview";
 import Chat from "./pages/messages/Chat";
 import InvoiceList from "./pages/invoices/InvoiceList";
 import InvoiceDetailPage from "./pages/invoices/InvoiceDetailPage";
@@ -106,9 +107,8 @@ const App = () => (
             <Route path="/hrm/payroll" element={<Payroll />} />
             {/* Project Routes */}
             <Route path="/projects" element={<Overview />} />
+            <Route path="/projects/overview/:id" element={<ProjectOverviewPage />} />
             <Route path="/projects/:id" element={<ProjectDashboard />} />
-            <Route path="/projects/tasks" element={<Kanban />} />
-            <Route path="/projects/kanban" element={<Kanban />} />
             <Route path="/projects/timeline" element={<Timeline />} />
             {/* Communication */}
             <Route path="/messages" element={<Chat />} />
@@ -134,7 +134,6 @@ const App = () => (
             <Route path="/user-management/users" element={<ManageUsers />} />
             <Route path="/user-management/roles" element={<RolesPermissions />} />
             <Route path="/user-management/delete-request" element={<DeleteRequest />} />
-            <Route path="/tasks" element={<Kanban />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/files" element={<Files />} />
             <Route path="/tickets" element={<Tickets />} />

@@ -78,8 +78,6 @@ const navigation: NavItem[] = [
     icon: FolderKanban,
     children: [
       { title: "Overview", href: "/projects" },
-      { title: "Tasks", href: "/projects/tasks" },
-      { title: "Kanban", href: "/projects/kanban" },
       { title: "Timeline", href: "/projects/timeline" },
     ],
   },

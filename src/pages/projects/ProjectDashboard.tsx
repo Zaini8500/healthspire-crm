@@ -166,9 +166,9 @@ export default function ProjectDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tasks.map(t => (
+                {tasks.map((t, idx) => (
                   <TableRow key={t.id}>
-                    <TableCell>{t.id}</TableCell>
+                    <TableCell>{idx + 1}</TableCell>
                     <TableCell>{t.title}</TableCell>
                     <TableCell>{t.status}</TableCell>
                     <TableCell>{t.start}</TableCell>
@@ -198,9 +198,9 @@ export default function ProjectDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {contracts.map(c => (
+                {contracts.map((c, idx) => (
                   <TableRow key={c.id}>
-                    <TableCell>{c.id}</TableCell>
+                    <TableCell>{idx + 1}</TableCell>
                     <TableCell>{c.title}</TableCell>
                     <TableCell>{c.amount}</TableCell>
                     <TableCell>{c.contractDate}</TableCell>
