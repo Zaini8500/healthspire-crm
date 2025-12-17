@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const ContractSchema = new mongoose.Schema(
   {
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
+    leadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead" },
     client: { type: String, default: "" },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     title: { type: String, default: "" },
@@ -10,8 +11,14 @@ const ContractSchema = new mongoose.Schema(
     contractDate: { type: Date },
     validUntil: { type: Date },
     status: { type: String, default: "Open" },
+    tax1: { type: Number, default: 0 },
+    tax2: { type: Number, default: 0 },
+    note: { type: String, default: "" },
+    fileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "File" }],
   },
   { timestamps: true }
 );
+
+ContractSchema.index({ leadId: 1, createdAt: -1 });
 
 export default mongoose.model("Contract", ContractSchema);

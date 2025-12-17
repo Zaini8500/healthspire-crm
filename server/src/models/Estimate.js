@@ -17,6 +17,7 @@ const EstimateSchema = new mongoose.Schema(
     number: { type: String },
     client: { type: String, required: true },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
+    leadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead" },
     estimateDate: { type: Date },
     validUntil: { type: Date },
     status: { type: String, enum: ["Draft", "Sent", "Accepted", "Declined"], default: "Draft" },
@@ -26,8 +27,11 @@ const EstimateSchema = new mongoose.Schema(
     advancedAmount: { type: Number, default: 0 },
     amount: { type: Number, default: 0 },
     items: { type: [ItemSchema], default: [] },
+    fileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "File" }],
   },
   { timestamps: true }
 );
+
+EstimateSchema.index({ leadId: 1, createdAt: -1 });
 
 export default mongoose.model("Estimate", EstimateSchema);

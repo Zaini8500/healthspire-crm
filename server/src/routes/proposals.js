@@ -7,8 +7,10 @@ router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const clientId = req.query.clientId?.toString();
+    const leadId = req.query.leadId?.toString();
     const filter = {};
     if (clientId) filter.clientId = clientId;
+    if (leadId) filter.leadId = leadId;
     if (q) filter.$or = [{ title: { $regex: q, $options: "i" } }, { client: { $regex: q, $options: "i" } }];
     const items = await Proposal.find(filter).sort({ createdAt: -1 }).lean();
     res.json(items);

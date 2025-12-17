@@ -258,6 +258,22 @@ export default function Expenses() {
     loadExpenses();
   }, [query, member, project]);
 
+  const openNewExpense = () => {
+    setExpenseForm({
+      date: "",
+      category: "",
+      employeeId: "-",
+      clientId: "-",
+      projectId: "-",
+      title: "",
+      description: "",
+      amount: "",
+      tax: "",
+      tax2: "",
+    });
+    setOpenAddExpense(true);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -287,9 +303,7 @@ export default function Expenses() {
             </DialogContent>
           </Dialog>
           <Dialog open={openAddExpense} onOpenChange={setOpenAddExpense}>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm"><Plus className="w-4 h-4 mr-2"/>Add expense</Button>
-            </DialogTrigger>
+            <Button type="button" variant="outline" size="sm" onClick={openNewExpense}><Plus className="w-4 h-4 mr-2"/>Add expense</Button>
             <DialogContent className="bg-card max-w-3xl" aria-describedby={undefined}>
               <DialogHeader><DialogTitle>Add expense</DialogTitle></DialogHeader>
               <div className="grid gap-3 sm:grid-cols-12">

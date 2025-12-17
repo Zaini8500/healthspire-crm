@@ -52,6 +52,15 @@ const API_BASE = "http://localhost:5000";
 type Employee = { _id: string; name?: string; firstName?: string; lastName?: string };
 type LeadLabel = { _id: string; name: string; color?: string };
 
+type ContactDoc = {
+  _id: string;
+  leadId?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  isPrimaryContact?: boolean;
+};
+
 type LeadDoc = {
   _id: string;
   name: string;
@@ -95,6 +104,7 @@ export default function Leads() {
   const [items, setItems] = useState<LeadDoc[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [labels, setLabels] = useState<LeadLabel[]>([]);
+  const [contacts, setContacts] = useState<ContactDoc[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,6 +162,23 @@ export default function Leads() {
     labels.forEach((l) => m.set(l._id, l));
     return m;
   }, [labels]);
+
+  const primaryContactByLeadId = useMemo(() => {
+    const m = new Map<string, ContactDoc>();
+    for (const c of contacts) {
+      const leadId = c.leadId?.toString?.() ?? (c.leadId ? String(c.leadId) : "");
+      if (!leadId) continue;
+      if (!c.isPrimaryContact) continue;
+      m.set(leadId, c);
+    }
+    return m;
+  }, [contacts]);
+
+  const displayContactName = (c?: ContactDoc | null) => {
+    if (!c) return "-";
+    const n = `${c.firstName || ""}${c.lastName ? ` ${c.lastName}` : ""}`.trim();
+    return n || c.name || "-";
+  };
 
   const formatDate = (iso?: string) => {
     if (!iso) return "-";
@@ -212,6 +239,17 @@ export default function Leads() {
     }
   };
 
+  const loadContacts = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`);
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      setContacts(Array.isArray(data) ? data : []);
+    } catch {
+      // Silent failure: leads list should still work
+    }
+  };
+
   const loadLeads = async () => {
     try {
       setLoading(true);
@@ -238,6 +276,7 @@ export default function Leads() {
   useEffect(() => {
     loadEmployees();
     loadLabels();
+    loadContacts();
     loadLeads();
   }, []);
 
@@ -440,7 +479,7 @@ export default function Leads() {
       ["Name", "Primary contact", "Phone", "Owner", "Labels", "Created", "Status", "Source"],
       ...items.map((l) => [
         l.name || "",
-        l.company || "",
+        displayContactName(primaryContactByLeadId.get(l._id)),
         l.phone || "",
         l.ownerId ? (employeeNameById.get(l.ownerId) || "") : "",
         Array.isArray(l.labels)
@@ -461,6 +500,7 @@ export default function Leads() {
     const rowsHtml = items
       .map((l) => {
         const owner = l.ownerId ? (employeeNameById.get(l.ownerId) || "-") : "-";
+        const pc = displayContactName(primaryContactByLeadId.get(l._id));
         const lbl = Array.isArray(l.labels)
           ? l.labels
               .map((id) => labelById.get(id)?.name || "")
@@ -470,7 +510,7 @@ export default function Leads() {
         return `
           <tr>
             <td>${l.name || "-"}</td>
-            <td>${l.company || "-"}</td>
+            <td>${pc || "-"}</td>
             <td>${l.phone || "-"}</td>
             <td>${owner}</td>
             <td>${lbl || "-"}</td>
@@ -943,10 +983,31 @@ export default function Leads() {
                     const variant = (STATUS_VARIANT_BY_VALUE.get(status) || "default") as any;
                     const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "-") : "-";
                     const leadLabels = Array.isArray(lead.labels) ? lead.labels.map((id) => labelById.get(id)).filter(Boolean) : [];
+                    const primary = primaryContactByLeadId.get(lead._id);
                     return (
                       <TableRow key={lead._id}>
-                        <TableCell className="whitespace-nowrap text-primary underline cursor-pointer" onClick={() => navigate(`/crm/leads/${lead._id}`)}>{lead.name}</TableCell>
-                        <TableCell className="whitespace-nowrap text-muted-foreground">{lead.company || "-"}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <button
+                            type="button"
+                            className="text-primary underline cursor-pointer"
+                            onClick={() => navigate(`/crm/leads/${lead._id}`)}
+                          >
+                            {lead.name}
+                          </button>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {primary ? (
+                            <button
+                              type="button"
+                              className="text-primary underline cursor-pointer"
+                              onClick={() => navigate(`/crm/contacts/${primary._id}`)}
+                            >
+                              {displayContactName(primary)}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">{lead.phone || "-"}</TableCell>
                         <TableCell className="whitespace-nowrap text-primary">{ownerName}</TableCell>
                         <TableCell className="whitespace-nowrap">
@@ -998,7 +1059,16 @@ export default function Leads() {
                   <CardContent className="p-3 pt-0 space-y-3 min-h-[280px]">
                     {kanbanGroups[c.id]?.map((lead) => (
                       <div key={lead._id} className="kanban-card cursor-pointer" onClick={() => openEditLead(lead)}>
-                        <div className="font-medium text-sm truncate">{lead.name}</div>
+                        <button
+                          type="button"
+                          className="font-medium text-sm truncate text-left"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/crm/leads/${lead._id}`);
+                          }}
+                        >
+                          {lead.name}
+                        </button>
                         <div className="text-xs text-muted-foreground mt-1">{lead.source || "-"}</div>
                         <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                           <span>{formatRelative(lead.createdAt)}</span>

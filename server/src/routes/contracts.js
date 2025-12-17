@@ -7,9 +7,11 @@ router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const clientId = req.query.clientId?.toString();
+    const leadId = req.query.leadId?.toString();
     const projectId = req.query.projectId?.toString();
     const filter = {};
     if (clientId) filter.clientId = clientId;
+    if (leadId) filter.leadId = leadId;
     if (projectId) filter.projectId = projectId;
     if (q) filter.$or = [{ title: { $regex: q, $options: "i" } }, { client: { $regex: q, $options: "i" } }];
     const items = await Contract.find(filter).sort({ createdAt: -1 }).lean();

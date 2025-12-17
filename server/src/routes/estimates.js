@@ -6,13 +6,14 @@ const router = express.Router();
 // List estimates with optional search and status
 router.get("/", async (req, res) => {
   try {
-    const { q = "", status } = req.query;
+    const { q = "", status, leadId } = req.query;
     const cond = {};
     if (q) cond.$or = [
       { number: new RegExp(q, "i") },
       { client: new RegExp(q, "i") },
     ];
     if (status && status !== "-") cond.status = status;
+    if (leadId) cond.leadId = leadId;
     const list = await Estimate.find(cond).sort({ createdAt: -1 }).lean();
     res.json(list);
   } catch (err) {
@@ -34,11 +35,11 @@ router.get("/:id", async (req, res) => {
 // Create estimate
 router.post("/", async (req, res) => {
   try {
-    const { client, clientId, estimateDate, validUntil, tax = 0, tax2 = 0, note = "", advancedAmount = 0, items = [] } = req.body || {};
+    const { client, clientId, leadId, estimateDate, validUntil, tax = 0, tax2 = 0, note = "", advancedAmount = 0, items = [], fileIds = [] } = req.body || {};
     if (!client) return res.status(400).json({ error: "client is required" });
     const number = String(Math.floor(Date.now() / 1000));
     const amount = Array.isArray(items) ? items.reduce((a, it) => a + Number(it.total || 0), 0) : 0;
-    const doc = await Estimate.create({ number, client, clientId, estimateDate, validUntil, tax, tax2, note, advancedAmount, amount, items });
+    const doc = await Estimate.create({ number, client, clientId, leadId, estimateDate, validUntil, tax, tax2, note, advancedAmount, amount, items, fileIds });
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });

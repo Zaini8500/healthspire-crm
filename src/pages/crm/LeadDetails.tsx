@@ -28,6 +28,10 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import Events from "../events/Events";
+import Files from "../files/Files";
+import Notes from "../notes/Notes";
+import { TasksOverview } from "@/components/dashboard/TasksOverview";
 import {
   Check,
   Download,
@@ -35,6 +39,7 @@ import {
   Printer,
   RefreshCw,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
@@ -87,6 +92,55 @@ type ReminderDoc = {
   title?: string;
   dueAt?: string;
   repeat?: boolean;
+  createdAt?: string;
+};
+
+type ProjectDoc = {
+  _id: string;
+  title?: string;
+};
+
+type ContractDoc = {
+  _id: string;
+  leadId?: string;
+  title?: string;
+  projectId?: string;
+  contractDate?: string;
+  validUntil?: string;
+  status?: string;
+  tax1?: number;
+  tax2?: number;
+  note?: string;
+  fileIds?: string[];
+  createdAt?: string;
+};
+
+type ProposalDoc = {
+  _id: string;
+  leadId?: string;
+  proposalDate?: string;
+  validUntil?: string;
+  status?: string;
+  tax1?: number;
+  tax2?: number;
+  note?: string;
+  fileIds?: string[];
+  createdAt?: string;
+};
+
+type EstimateDoc = {
+  _id: string;
+  leadId?: string;
+  number?: string;
+  estimateDate?: string;
+  validUntil?: string;
+  status?: string;
+  tax?: number;
+  tax2?: number;
+  note?: string;
+  advancedAmount?: number;
+  amount?: number;
+  fileIds?: string[];
   createdAt?: string;
 };
 
@@ -146,6 +200,15 @@ function parseTimeToHoursMinutes(raw: string) {
   return null;
 }
 
+function formatYmd(iso?: string) {
+  if (!iso) return "-";
+  try {
+    return new Date(iso).toISOString().slice(0, 10);
+  } catch {
+    return "-";
+  }
+}
+
 export default function LeadDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -155,6 +218,7 @@ export default function LeadDetails() {
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [labels, setLabels] = useState<LeadLabel[]>([]);
+  const [projects, setProjects] = useState<ProjectDoc[]>([]);
 
   const [lead, setLead] = useState<LeadDoc | null>(null);
   const [leadForm, setLeadForm] = useState({
@@ -191,6 +255,48 @@ export default function LeadDetails() {
     repeat: false,
   });
 
+  const [contracts, setContracts] = useState<ContractDoc[]>([]);
+  const [contractsQuery, setContractsQuery] = useState("");
+  const [openAddContract, setOpenAddContract] = useState(false);
+  const [contractForm, setContractForm] = useState({
+    title: "",
+    contractDate: "",
+    validUntil: "",
+    projectId: "-",
+    tax1: "0",
+    tax2: "0",
+    note: "",
+  });
+  const contractFilesRef = useRef<HTMLInputElement>(null);
+  const [contractSelectedFiles, setContractSelectedFiles] = useState<File[]>([]);
+
+  const [proposals, setProposals] = useState<ProposalDoc[]>([]);
+  const [proposalsQuery, setProposalsQuery] = useState("");
+  const [openAddProposal, setOpenAddProposal] = useState(false);
+  const [proposalForm, setProposalForm] = useState({
+    proposalDate: "",
+    validUntil: "",
+    tax1: "0",
+    tax2: "0",
+    note: "",
+  });
+  const proposalFilesRef = useRef<HTMLInputElement>(null);
+  const [proposalSelectedFiles, setProposalSelectedFiles] = useState<File[]>([]);
+
+  const [estimates, setEstimates] = useState<EstimateDoc[]>([]);
+  const [estimatesQuery, setEstimatesQuery] = useState("");
+  const [openAddEstimate, setOpenAddEstimate] = useState(false);
+  const [estimateForm, setEstimateForm] = useState({
+    estimateDate: "",
+    validUntil: "",
+    tax: "0",
+    tax2: "0",
+    note: "",
+    advancedAmount: "",
+  });
+  const estimateFilesRef = useRef<HTMLInputElement>(null);
+  const [estimateSelectedFiles, setEstimateSelectedFiles] = useState<File[]>([]);
+
   const [openAddContact, setOpenAddContact] = useState(false);
   const [contactForm, setContactForm] = useState({
     firstName: "",
@@ -218,7 +324,16 @@ export default function LeadDetails() {
     return m;
   }, [employees]);
 
+  const projectTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    projects.forEach((p) => {
+      if (p._id) m.set(p._id, p.title || "-");
+    });
+    return m;
+  }, [projects]);
+
   const title = lead?.name || "Lead";
+  const leadClientName = lead?.name || "";
 
   const formatDateTime = (iso?: string) => {
     if (!iso) return "";
@@ -230,6 +345,230 @@ export default function LeadDetails() {
       return `${yyyyMmDd} ${hh}:${mm}`;
     } catch {
       return "";
+    }
+  };
+
+  const loadProjects = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/projects`);
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      setProjects(Array.isArray(data) ? data : []);
+    } catch {
+      toast.error("Failed to load projects");
+    }
+  };
+
+  const uploadLeadFiles = async (filesToUpload: File[]) => {
+    if (!id) return [] as string[];
+    const uploadedIds: string[] = [];
+    for (const f of filesToUpload) {
+      const fd = new FormData();
+      fd.append("leadId", id);
+      fd.append("name", f.name);
+      fd.append("file", f);
+      const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      if (json?._id) uploadedIds.push(String(json._id));
+    }
+    return uploadedIds;
+  };
+
+  const loadContracts = async () => {
+    if (!id) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("leadId", id);
+      if (contractsQuery.trim()) params.set("q", contractsQuery.trim());
+      const res = await fetch(`${API_BASE}/api/contracts?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      setContracts(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load contracts");
+    }
+  };
+
+  const saveContract = async () => {
+    if (!id) return;
+    try {
+      const t = contractForm.title.trim();
+      if (!t) {
+        toast.error("Title is required");
+        return;
+      }
+
+      const fileIds = contractSelectedFiles.length ? await uploadLeadFiles(contractSelectedFiles) : [];
+      const res = await fetch(`${API_BASE}/api/contracts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: id,
+          client: leadClientName,
+          title: t,
+          contractDate: contractForm.contractDate ? new Date(contractForm.contractDate).toISOString() : undefined,
+          validUntil: contractForm.validUntil ? new Date(contractForm.validUntil).toISOString() : undefined,
+          projectId: contractForm.projectId !== "-" ? contractForm.projectId : undefined,
+          tax1: Number(contractForm.tax1 || 0),
+          tax2: Number(contractForm.tax2 || 0),
+          note: contractForm.note || "",
+          fileIds,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+
+      toast.success("Contract created");
+      setOpenAddContract(false);
+      setContractForm({ title: "", contractDate: "", validUntil: "", projectId: "-", tax1: "0", tax2: "0", note: "" });
+      setContractSelectedFiles([]);
+      if (contractFilesRef.current) contractFilesRef.current.value = "";
+      await loadContracts();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save contract");
+    }
+  };
+
+  const deleteContract = async (contractId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/contracts/${contractId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      toast.success("Contract deleted");
+      await loadContracts();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete contract");
+    }
+  };
+
+  const loadProposals = async () => {
+    if (!id) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("leadId", id);
+      if (proposalsQuery.trim()) params.set("q", proposalsQuery.trim());
+      const res = await fetch(`${API_BASE}/api/proposals?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      setProposals(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load proposals");
+    }
+  };
+
+  const saveProposal = async () => {
+    if (!id) return;
+    try {
+      if (!proposalForm.proposalDate) {
+        toast.error("Proposal date is required");
+        return;
+      }
+
+      const fileIds = proposalSelectedFiles.length ? await uploadLeadFiles(proposalSelectedFiles) : [];
+      const res = await fetch(`${API_BASE}/api/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: id,
+          client: leadClientName,
+          proposalDate: proposalForm.proposalDate ? new Date(proposalForm.proposalDate).toISOString() : undefined,
+          validUntil: proposalForm.validUntil ? new Date(proposalForm.validUntil).toISOString() : undefined,
+          tax1: Number(proposalForm.tax1 || 0),
+          tax2: Number(proposalForm.tax2 || 0),
+          note: proposalForm.note || "",
+          fileIds,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+
+      toast.success("Proposal created");
+      setOpenAddProposal(false);
+      setProposalForm({ proposalDate: "", validUntil: "", tax1: "0", tax2: "0", note: "" });
+      setProposalSelectedFiles([]);
+      if (proposalFilesRef.current) proposalFilesRef.current.value = "";
+      await loadProposals();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save proposal");
+    }
+  };
+
+  const deleteProposal = async (proposalId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/proposals/${proposalId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      toast.success("Proposal deleted");
+      await loadProposals();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete proposal");
+    }
+  };
+
+  const loadEstimates = async () => {
+    if (!id) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("leadId", id);
+      if (estimatesQuery.trim()) params.set("q", estimatesQuery.trim());
+      const res = await fetch(`${API_BASE}/api/estimates?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      setEstimates(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load estimates");
+    }
+  };
+
+  const saveEstimate = async () => {
+    if (!id) return;
+    try {
+      if (!estimateForm.estimateDate) {
+        toast.error("Estimate date is required");
+        return;
+      }
+
+      const fileIds = estimateSelectedFiles.length ? await uploadLeadFiles(estimateSelectedFiles) : [];
+      const res = await fetch(`${API_BASE}/api/estimates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: id,
+          client: leadClientName || "-",
+          estimateDate: estimateForm.estimateDate ? new Date(estimateForm.estimateDate).toISOString() : undefined,
+          validUntil: estimateForm.validUntil ? new Date(estimateForm.validUntil).toISOString() : undefined,
+          tax: Number(estimateForm.tax || 0),
+          tax2: Number(estimateForm.tax2 || 0),
+          note: estimateForm.note || "",
+          advancedAmount: estimateForm.advancedAmount ? Number(estimateForm.advancedAmount || 0) : 0,
+          items: [],
+          fileIds,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+
+      toast.success("Estimate created");
+      setOpenAddEstimate(false);
+      setEstimateForm({ estimateDate: "", validUntil: "", tax: "0", tax2: "0", note: "", advancedAmount: "" });
+      setEstimateSelectedFiles([]);
+      if (estimateFilesRef.current) estimateFilesRef.current.value = "";
+      await loadEstimates();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save estimate");
+    }
+  };
+
+  const deleteEstimate = async (estimateId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/estimates/${estimateId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      toast.success("Estimate deleted");
+      await loadEstimates();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete estimate");
     }
   };
 
@@ -417,6 +756,7 @@ export default function LeadDetails() {
   useEffect(() => {
     loadEmployees();
     loadLabels();
+    loadProjects();
   }, []);
 
   useEffect(() => {
@@ -435,6 +775,45 @@ export default function LeadDetails() {
     }, 250);
     return () => window.clearTimeout(t);
   }, [contactsQuery]);
+
+  useEffect(() => {
+    if (activeTab !== "contracts") return;
+    loadContracts();
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (activeTab !== "contracts") return;
+    const t = window.setTimeout(() => {
+      loadContracts();
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [contractsQuery, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "proposals") return;
+    loadProposals();
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (activeTab !== "proposals") return;
+    const t = window.setTimeout(() => {
+      loadProposals();
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [proposalsQuery, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "estimates") return;
+    loadEstimates();
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (activeTab !== "estimates") return;
+    const t = window.setTimeout(() => {
+      loadEstimates();
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [estimatesQuery, activeTab]);
 
   const toggleLeadLabel = (labelId: string) => {
     const lid = labelId?.toString?.() ?? String(labelId);
@@ -484,6 +863,27 @@ export default function LeadDetails() {
     } catch (e: any) {
       toast.error(e?.message || "Failed to save");
     }
+  };
+
+  const openNewContract = () => {
+    setContractForm({ title: "", contractDate: "", validUntil: "", projectId: "-", tax1: "0", tax2: "0", note: "" });
+    setContractSelectedFiles([]);
+    if (contractFilesRef.current) contractFilesRef.current.value = "";
+    setOpenAddContract(true);
+  };
+
+  const openNewProposal = () => {
+    setProposalForm({ proposalDate: "", validUntil: "", tax1: "0", tax2: "0", note: "" });
+    setProposalSelectedFiles([]);
+    if (proposalFilesRef.current) proposalFilesRef.current.value = "";
+    setOpenAddProposal(true);
+  };
+
+  const openNewEstimate = () => {
+    setEstimateForm({ estimateDate: "", validUntil: "", tax: "0", tax2: "0", note: "", advancedAmount: "" });
+    setEstimateSelectedFiles([]);
+    if (estimateFilesRef.current) estimateFilesRef.current.value = "";
+    setOpenAddEstimate(true);
   };
 
   const openNewContact = () => {
@@ -599,6 +999,55 @@ export default function LeadDetails() {
     downloadCsv(`lead_${id}_contacts.csv`, rows);
   };
 
+  const exportContracts = () => {
+    const rows: string[][] = [
+      ["Title", "Project", "Contract Date", "Valid Until", "Tax1", "Tax2", "Status", "Note"],
+      ...contracts.map((c) => [
+        c.title || "",
+        c.projectId ? (projectTitleById.get(c.projectId) || "-") : "-",
+        formatYmd(c.contractDate),
+        formatYmd(c.validUntil),
+        String(c.tax1 ?? 0),
+        String(c.tax2 ?? 0),
+        c.status || "-",
+        c.note || "",
+      ]),
+    ];
+    downloadCsv(`lead_${id}_contracts.csv`, rows);
+  };
+
+  const exportProposals = () => {
+    const rows: string[][] = [
+      ["Proposal Date", "Valid Until", "Tax1", "Tax2", "Status", "Note"],
+      ...proposals.map((p) => [
+        formatYmd(p.proposalDate),
+        formatYmd(p.validUntil),
+        String(p.tax1 ?? 0),
+        String(p.tax2 ?? 0),
+        p.status || "-",
+        p.note || "",
+      ]),
+    ];
+    downloadCsv(`lead_${id}_proposals.csv`, rows);
+  };
+
+  const exportEstimates = () => {
+    const rows: string[][] = [
+      ["Estimate Date", "Valid Until", "Tax", "Tax2", "Advanced", "Amount", "Status", "Note"],
+      ...estimates.map((e) => [
+        formatYmd(e.estimateDate),
+        formatYmd(e.validUntil),
+        String(e.tax ?? 0),
+        String(e.tax2 ?? 0),
+        String(e.advancedAmount ?? 0),
+        String(e.amount ?? 0),
+        e.status || "-",
+        e.note || "",
+      ]),
+    ];
+    downloadCsv(`lead_${id}_estimates.csv`, rows);
+  };
+
   const printContacts = () => {
     const rowsHtml = contacts
       .map((c) => {
@@ -638,6 +1087,207 @@ export default function LeadDetails() {
           <th>Phone</th>
           <th>Skype</th>
           <th>Primary</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </body>
+</html>
+<script>
+  window.onload = function () {
+    try { window.focus(); } catch (e) {}
+    try { window.print(); } catch (e) {}
+  };
+</script>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast.error("Popup blocked");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
+  const printEstimates = () => {
+    const rowsHtml = estimates
+      .map((e) => {
+        return `
+          <tr>
+            <td>${toStr(formatYmd(e.estimateDate))}</td>
+            <td>${toStr(formatYmd(e.validUntil))}</td>
+            <td>${toStr(e.tax ?? 0)}</td>
+            <td>${toStr(e.tax2 ?? 0)}</td>
+            <td>${toStr(e.advancedAmount ?? 0)}</td>
+            <td>${toStr(e.amount ?? 0)}</td>
+            <td>${toStr(e.status || "-")}</td>
+            <td>${toStr(e.note)}</td>
+          </tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Estimates</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+      th { background: #f5f5f5; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Estimates</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Estimate Date</th>
+          <th>Valid Until</th>
+          <th>Tax</th>
+          <th>Tax2</th>
+          <th>Advanced</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </body>
+</html>
+<script>
+  window.onload = function () {
+    try { window.focus(); } catch (e) {}
+    try { window.print(); } catch (e) {}
+  };
+</script>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast.error("Popup blocked");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
+  const printProposals = () => {
+    const rowsHtml = proposals
+      .map((p) => {
+        return `
+          <tr>
+            <td>${toStr(formatYmd(p.proposalDate))}</td>
+            <td>${toStr(formatYmd(p.validUntil))}</td>
+            <td>${toStr(p.tax1 ?? 0)}</td>
+            <td>${toStr(p.tax2 ?? 0)}</td>
+            <td>${toStr(p.status || "-")}</td>
+            <td>${toStr(p.note)}</td>
+          </tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Proposals</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+      th { background: #f5f5f5; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Proposals</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Proposal Date</th>
+          <th>Valid Until</th>
+          <th>Tax1</th>
+          <th>Tax2</th>
+          <th>Status</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </body>
+</html>
+<script>
+  window.onload = function () {
+    try { window.focus(); } catch (e) {}
+    try { window.print(); } catch (e) {}
+  };
+</script>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast.error("Popup blocked");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
+  const printContracts = () => {
+    const rowsHtml = contracts
+      .map((c) => {
+        const project = c.projectId ? (projectTitleById.get(c.projectId) || "-") : "-";
+        return `
+          <tr>
+            <td>${toStr(c.title)}</td>
+            <td>${toStr(project)}</td>
+            <td>${toStr(formatYmd(c.contractDate))}</td>
+            <td>${toStr(formatYmd(c.validUntil))}</td>
+            <td>${toStr(c.tax1 ?? 0)}</td>
+            <td>${toStr(c.tax2 ?? 0)}</td>
+            <td>${toStr(c.status || "-")}</td>
+            <td>${toStr(c.note)}</td>
+          </tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Contracts</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+      th { background: #f5f5f5; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Contracts</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Project</th>
+          <th>Contract Date</th>
+          <th>Valid Until</th>
+          <th>Tax1</th>
+          <th>Tax2</th>
+          <th>Status</th>
+          <th>Note</th>
         </tr>
       </thead>
       <tbody>
@@ -1051,14 +1701,452 @@ export default function LeadDetails() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tasks" className="mt-4"><SimpleEmptyTab title="Tasks" /></TabsContent>
-        <TabsContent value="estimates" className="mt-4"><SimpleEmptyTab title="Estimates" /></TabsContent>
+        <TabsContent value="tasks" className="mt-4"><TasksOverview /></TabsContent>
+        <TabsContent value="estimates" className="mt-4">
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Estimates</div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={exportEstimates}><Download className="w-4 h-4 mr-2"/>Excel</Button>
+                  <Button type="button" variant="outline" onClick={printEstimates}><Printer className="w-4 h-4 mr-2"/>Print</Button>
+                  <Button type="button" variant="outline" onClick={loadEstimates}><RefreshCw className="w-4 h-4"/></Button>
+                  <Button type="button" onClick={openNewEstimate}><Plus className="w-4 h-4 mr-2"/>Add estimate</Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <Input className="w-64" placeholder="Search" value={estimatesQuery} onChange={(e) => setEstimatesQuery(e.target.value)} />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Estimate</TableHead>
+                    <TableHead>Estimate Date</TableHead>
+                    <TableHead>Valid Until</TableHead>
+                    <TableHead>Tax</TableHead>
+                    <TableHead>Tax2</TableHead>
+                    <TableHead>Advanced</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead className="w-16"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {estimates.length ? estimates.map((e) => (
+                    <TableRow key={e._id}>
+                      <TableCell className="whitespace-nowrap">
+                        <button
+                          type="button"
+                          className="text-primary underline cursor-pointer"
+                          onClick={() => navigate(`/prospects/estimates/${e._id}`)}
+                        >
+                          Estimate: {e.number || "-"}
+                        </button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{formatYmd(e.estimateDate)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatYmd(e.validUntil)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(e.tax ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(e.tax2 ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(e.advancedAmount ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(e.amount ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{e.status || "-"}</TableCell>
+                      <TableCell className="max-w-[420px] truncate">{e.note || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => deleteEstimate(e._id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Dialog open={openAddEstimate} onOpenChange={setOpenAddEstimate}>
+            <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Add estimate</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid gap-3">
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Estimate date</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={estimateForm.estimateDate} onChange={(e) => setEstimateForm((p) => ({ ...p, estimateDate: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Valid until</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={estimateForm.validUntil} onChange={(e) => setEstimateForm((p) => ({ ...p, validUntil: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={estimateForm.tax} onChange={(e) => setEstimateForm((p) => ({ ...p, tax: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax 2</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={estimateForm.tax2} onChange={(e) => setEstimateForm((p) => ({ ...p, tax2: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Advanced</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={estimateForm.advancedAmount} onChange={(e) => setEstimateForm((p) => ({ ...p, advancedAmount: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-start gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Note</Label>
+                  <div className="col-span-9">
+                    <Textarea placeholder="Note" value={estimateForm.note} onChange={(e) => setEstimateForm((p) => ({ ...p, note: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Files</Label>
+                  <div className="col-span-9">
+                    <input
+                      ref={estimateFilesRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => setEstimateSelectedFiles(Array.from(e.target.files || []))}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={() => estimateFilesRef.current?.click()}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose files
+                      </Button>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {estimateSelectedFiles.length ? `${estimateSelectedFiles.length} file(s) selected` : "No files selected"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpenAddEstimate(false)}>Close</Button>
+                <Button type="button" onClick={saveEstimate}>Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
         <TabsContent value="estimate-requests" className="mt-4"><SimpleEmptyTab title="Estimate Requests" /></TabsContent>
-        <TabsContent value="proposals" className="mt-4"><SimpleEmptyTab title="Proposals" /></TabsContent>
-        <TabsContent value="contracts" className="mt-4"><SimpleEmptyTab title="Contracts" /></TabsContent>
-        <TabsContent value="notes" className="mt-4"><SimpleEmptyTab title="Notes" /></TabsContent>
-        <TabsContent value="files" className="mt-4"><SimpleEmptyTab title="Files" /></TabsContent>
-        <TabsContent value="events" className="mt-4"><SimpleEmptyTab title="Events" /></TabsContent>
+        <TabsContent value="proposals" className="mt-4">
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Proposals</div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={exportProposals}><Download className="w-4 h-4 mr-2"/>Excel</Button>
+                  <Button type="button" variant="outline" onClick={printProposals}><Printer className="w-4 h-4 mr-2"/>Print</Button>
+                  <Button type="button" variant="outline" onClick={loadProposals}><RefreshCw className="w-4 h-4"/></Button>
+                  <Button type="button" onClick={openNewProposal}><Plus className="w-4 h-4 mr-2"/>Add proposal</Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <Input className="w-64" placeholder="Search" value={proposalsQuery} onChange={(e) => setProposalsQuery(e.target.value)} />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Proposal Date</TableHead>
+                    <TableHead>Valid Until</TableHead>
+                    <TableHead>Tax1</TableHead>
+                    <TableHead>Tax2</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead className="w-16"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {proposals.length ? proposals.map((p) => (
+                    <TableRow key={p._id}>
+                      <TableCell className="whitespace-nowrap">
+                        <button
+                          type="button"
+                          className="text-primary underline cursor-pointer"
+                          onClick={() => navigate(`/prospects/proposals`)}
+                        >
+                          {formatYmd(p.proposalDate)}
+                        </button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{formatYmd(p.validUntil)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(p.tax1 ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(p.tax2 ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{p.status || "-"}</TableCell>
+                      <TableCell className="max-w-[420px] truncate">{p.note || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => deleteProposal(p._id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Dialog open={openAddProposal} onOpenChange={setOpenAddProposal}>
+            <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Add proposal</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid gap-3">
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Proposal date</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={proposalForm.proposalDate} onChange={(e) => setProposalForm((p) => ({ ...p, proposalDate: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Valid until</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={proposalForm.validUntil} onChange={(e) => setProposalForm((p) => ({ ...p, validUntil: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax 1</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={proposalForm.tax1} onChange={(e) => setProposalForm((p) => ({ ...p, tax1: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax 2</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={proposalForm.tax2} onChange={(e) => setProposalForm((p) => ({ ...p, tax2: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-start gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Note</Label>
+                  <div className="col-span-9">
+                    <Textarea placeholder="Note" value={proposalForm.note} onChange={(e) => setProposalForm((p) => ({ ...p, note: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Files</Label>
+                  <div className="col-span-9">
+                    <input
+                      ref={proposalFilesRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => setProposalSelectedFiles(Array.from(e.target.files || []))}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={() => proposalFilesRef.current?.click()}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose files
+                      </Button>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {proposalSelectedFiles.length ? `${proposalSelectedFiles.length} file(s) selected` : "No files selected"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpenAddProposal(false)}>Close</Button>
+                <Button type="button" onClick={saveProposal}>Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+        <TabsContent value="contracts" className="mt-4">
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Contracts</div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={exportContracts}><Download className="w-4 h-4 mr-2"/>Excel</Button>
+                  <Button type="button" variant="outline" onClick={printContracts}><Printer className="w-4 h-4 mr-2"/>Print</Button>
+                  <Button type="button" variant="outline" onClick={loadContracts}><RefreshCw className="w-4 h-4"/></Button>
+                  <Button type="button" onClick={openNewContract}><Plus className="w-4 h-4 mr-2"/>Add contract</Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <Input className="w-64" placeholder="Search" value={contractsQuery} onChange={(e) => setContractsQuery(e.target.value)} />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Title</TableHead>
+                    <TableHead>Project</TableHead>
+                    <TableHead>Contract Date</TableHead>
+                    <TableHead>Valid Until</TableHead>
+                    <TableHead>Tax1</TableHead>
+                    <TableHead>Tax2</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead className="w-16"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {contracts.length ? contracts.map((c) => (
+                    <TableRow key={c._id}>
+                      <TableCell className="whitespace-nowrap">
+                        <button
+                          type="button"
+                          className="text-primary underline cursor-pointer"
+                          onClick={() => navigate(`/sales/contracts`)}
+                        >
+                          {c.title || "-"}
+                        </button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{c.projectId ? (projectTitleById.get(c.projectId) || "-") : "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatYmd(c.contractDate)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatYmd(c.validUntil)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(c.tax1 ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{String(c.tax2 ?? 0)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{c.status || "-"}</TableCell>
+                      <TableCell className="max-w-[340px] truncate">{c.note || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => deleteContract(c._id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Dialog open={openAddContract} onOpenChange={setOpenAddContract}>
+            <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Add contract</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid gap-3">
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Title</Label>
+                  <div className="col-span-9">
+                    <Input placeholder="Title" value={contractForm.title} onChange={(e) => setContractForm((p) => ({ ...p, title: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Project</Label>
+                  <div className="col-span-9">
+                    <Select value={contractForm.projectId} onValueChange={(v) => setContractForm((p) => ({ ...p, projectId: v }))}>
+                      <SelectTrigger><SelectValue placeholder="- Project -" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="-">- Project -</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p._id} value={p._id}>{p.title || "-"}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Contract date</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={contractForm.contractDate} onChange={(e) => setContractForm((p) => ({ ...p, contractDate: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Valid until</Label>
+                  <div className="col-span-9">
+                    <Input type="date" value={contractForm.validUntil} onChange={(e) => setContractForm((p) => ({ ...p, validUntil: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax 1</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={contractForm.tax1} onChange={(e) => setContractForm((p) => ({ ...p, tax1: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Tax 2</Label>
+                  <div className="col-span-9">
+                    <Input type="number" value={contractForm.tax2} onChange={(e) => setContractForm((p) => ({ ...p, tax2: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-start gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Note</Label>
+                  <div className="col-span-9">
+                    <Textarea placeholder="Note" value={contractForm.note} onChange={(e) => setContractForm((p) => ({ ...p, note: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 items-center gap-3">
+                  <Label className="col-span-3 text-muted-foreground">Files</Label>
+                  <div className="col-span-9">
+                    <input
+                      ref={contractFilesRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => setContractSelectedFiles(Array.from(e.target.files || []))}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={() => contractFilesRef.current?.click()}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose files
+                      </Button>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {contractSelectedFiles.length ? `${contractSelectedFiles.length} file(s) selected` : "No files selected"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpenAddContract(false)}>Close</Button>
+                <Button type="button" onClick={saveContract}>Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+        <TabsContent value="notes" className="mt-4"><Notes /></TabsContent>
+        <TabsContent value="files" className="mt-4"><Files /></TabsContent>
+        <TabsContent value="events" className="mt-4"><Events /></TabsContent>
       </Tabs>
     </div>
   );

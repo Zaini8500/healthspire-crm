@@ -7,9 +7,18 @@ router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const clientId = req.query.clientId?.toString();
+    const leadId = req.query.leadId?.toString();
+    const labelId = req.query.labelId?.toString();
     const filter = {};
     if (clientId) filter.clientId = clientId;
-    if (q) filter.$or = [{ title: { $regex: q, $options: "i" } }, { client: { $regex: q, $options: "i" } }];
+    if (leadId) filter.leadId = leadId;
+    if (labelId) filter.labelId = labelId;
+    if (q) filter.$or = [
+      { title: { $regex: q, $options: "i" } },
+      { description: { $regex: q, $options: "i" } },
+      { location: { $regex: q, $options: "i" } },
+      { client: { $regex: q, $options: "i" } },
+    ];
     const items = await Event.find(filter).sort({ createdAt: -1 }).lean();
     res.json(items);
   } catch (e) { res.status(400).json({ error: e.message }); }
