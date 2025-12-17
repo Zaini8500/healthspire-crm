@@ -220,14 +220,16 @@ export default function ClientDetails() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
+                  <TableHead className="w-12">ID</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Price</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.map((p:any)=> (
+                {projects.map((p:any, idx: number)=> (
                   <TableRow key={String(p._id)}>
+                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="whitespace-nowrap">{p.title}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{p.status||"Open"}</TableCell>
                     <TableCell className="whitespace-nowrap">{p.price?`Rs.${p.price}`:"Rs.0"}</TableCell>

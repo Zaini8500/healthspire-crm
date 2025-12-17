@@ -1160,6 +1160,7 @@ export default function EmployeeProfile() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead className="w-12">ID</TableHead>
                               <TableHead>Title</TableHead>
                               <TableHead>Client</TableHead>
                               <TableHead>Start</TableHead>
@@ -1171,11 +1172,12 @@ export default function EmployeeProfile() {
                           <TableBody>
                             {projectItems.filter((p:any)=> projectStatusFilter === 'all' || p.status === projectStatusFilter).length === 0 && (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground">No projects found.</TableCell>
+                                <TableCell colSpan={7} className="text-center text-muted-foreground">No projects found.</TableCell>
                               </TableRow>
                             )}
-                            {projectItems.filter((p:any)=> projectStatusFilter === 'all' || p.status === projectStatusFilter).map((p:any)=> (
+                            {projectItems.filter((p:any)=> projectStatusFilter === 'all' || p.status === projectStatusFilter).map((p:any, idx: number)=> (
                               <TableRow key={p._id}>
+                                <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                                 <TableCell>{p.title || "-"}</TableCell>
                                 <TableCell>{p.client || "-"}</TableCell>
                                 <TableCell>{p.start ? new Date(p.start).toLocaleDateString() : "-"}</TableCell>
