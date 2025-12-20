@@ -51,6 +51,7 @@ import LeadsConversions from "./pages/reports/leads/Conversions";
 import LeadsTeamMembers from "./pages/reports/leads/TeamMembers";
 import TicketsStatistics from "./pages/reports/tickets/Statistics";
 import Tickets from "./pages/tickets/Tickets";
+import TicketDetails from "./pages/tickets/TicketDetails";
 import Files from "./pages/files/Files";
 import Notes from "./pages/notes/Notes";
 import HelpSupportHelp from "./pages/help-support/Help";
@@ -69,6 +70,8 @@ import InvoiceList from "./pages/invoices/InvoiceList";
 import InvoiceDetailPage from "./pages/invoices/InvoiceDetailPage";
 import InvoicePreview from "./pages/invoices/InvoicePreview";
 import EstimatePreview from "./pages/prospects/EstimatePreview";
+import Tasks from "./pages/tasks/Tasks";
+import TaskDetails from "./pages/tasks/TaskDetails";
 import NotFound from "./pages/NotFound";
 import SettingsPage from "./pages/settings/Settings";
 import AuthLayout from "./pages/auth/AuthLayout";
@@ -122,6 +125,8 @@ const App = () => (
             <Route path="/clients" element={<Clients />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
             <Route path="/clients/:id/primary-contact" element={<PrimaryContact />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/tasks/:id" element={<TaskDetails />} />
             {/* CRM Routes */}
             <Route path="/crm/leads" element={<Leads />} />
             <Route path="/crm/leads/:id" element={<LeadDetails />} />
@@ -171,6 +176,7 @@ const App = () => (
             <Route path="/notes" element={<Notes />} />
             <Route path="/files" element={<Files />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/tickets/:id" element={<TicketDetails />} />
             <Route path="/calendar" element={<CalendarPage />} />
             {/* Help & Support */}
             <Route path="/help-support" element={<HelpSupportHelp />} />

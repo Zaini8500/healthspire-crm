@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -44,12 +44,17 @@ import {
   X,
   Tags,
   Printer,
+  UserPlus,
+  ExternalLink,
+  Users,
+  Paperclip,
+  FileSignature,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API_BASE = "http://localhost:5000";
 
-type Employee = { _id: string; name?: string; firstName?: string; lastName?: string };
+type Employee = { _id: string; name?: string; firstName?: string; lastName?: string; image?: string; avatar?: string };
 type LeadLabel = { _id: string; name: string; color?: string };
 
 type ContactDoc = {
@@ -59,6 +64,7 @@ type ContactDoc = {
   firstName?: string;
   lastName?: string;
   isPrimaryContact?: boolean;
+  avatar?: string;
 };
 
 type LeadDoc = {
@@ -106,6 +112,47 @@ export default function Leads() {
   const [labels, setLabels] = useState<LeadLabel[]>([]);
   const [contacts, setContacts] = useState<ContactDoc[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const [kanbanCounts, setKanbanCounts] = useState<Record<string, { contacts: number; files: number; contracts: number }>>({});
+
+  const draggingLeadIdRef = useRef<string | null>(null);
+  const draggingFromStatusRef = useRef<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
+
+  const [convertMode, setConvertMode] = useState<"client" | "contact">("client");
+  const [makeClientOpen, setMakeClientOpen] = useState(false);
+  const [makeClientStep, setMakeClientStep] = useState<"details" | "contact">("details");
+  const [makeClientLead, setMakeClientLead] = useState<LeadDoc | null>(null);
+  const [makeClientForm, setMakeClientForm] = useState({
+    // client details
+    type: "Person" as "Organization" | "Person",
+    name: "",
+    owner: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    country: "",
+    phone: "",
+    website: "",
+    vatNumber: "",
+    gstNumber: "",
+    clientGroups: "",
+    currency: "",
+    currencySymbol: "",
+    labels: "",
+    disableOnlinePayment: false,
+    // contact
+    firstName: "",
+    lastName: "",
+    email: "",
+    contactPhone: "",
+    skype: "",
+    jobTitle: "",
+    gender: "male" as "male" | "female" | "other",
+    password: "",
+    primaryContact: true,
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
@@ -170,6 +217,16 @@ export default function Leads() {
       if (!leadId) continue;
       if (!c.isPrimaryContact) continue;
       m.set(leadId, c);
+    }
+    return m;
+  }, [contacts]);
+
+  const contactCountByLeadId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of contacts) {
+      const leadId = c.leadId?.toString?.() ?? (c.leadId ? String(c.leadId) : "");
+      if (!leadId) continue;
+      m.set(leadId, (m.get(leadId) || 0) + 1);
     }
     return m;
   }, [contacts]);
@@ -279,6 +336,48 @@ export default function Leads() {
     loadContacts();
     loadLeads();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const safeJson = async (url: string) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const json = await res.json().catch(() => []);
+        return Array.isArray(json) ? json : [];
+      } catch {
+        return [];
+      }
+    };
+
+    (async () => {
+      if (!items.length) {
+        setKanbanCounts({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        items.map(async (lead) => {
+          const leadId = String(lead._id);
+          const contactsCount = contactCountByLeadId.get(leadId) || 0;
+          const [files, contracts] = await Promise.all([
+            safeJson(`${API_BASE}/api/files?leadId=${encodeURIComponent(leadId)}`),
+            safeJson(`${API_BASE}/api/contracts?leadId=${encodeURIComponent(leadId)}`),
+          ]);
+          return [leadId, { contacts: contactsCount, files: files.length, contracts: contracts.length }] as const;
+        })
+      );
+
+      if (cancelled) return;
+      const next: Record<string, { contacts: number; files: number; contracts: number }> = {};
+      for (const [id, v] of entries) next[id] = v;
+      setKanbanCounts(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, contactCountByLeadId]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -642,6 +741,190 @@ export default function Leads() {
     return g;
   }, [items]);
 
+  const updateLeadStatus = async (leadId: string, newStatus: string) => {
+    const lead = items.find((x) => x._id === leadId);
+    if (!lead) return;
+    const prevStatus = lead.status || "New";
+    if (prevStatus === newStatus) return;
+
+    // optimistic UI
+    setItems((p) => p.map((x) => (x._id === leadId ? { ...x, status: newStatus } : x)));
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${encodeURIComponent(leadId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to update");
+    } catch (e: any) {
+      // rollback
+      setItems((p) => p.map((x) => (x._id === leadId ? { ...x, status: prevStatus } : x)));
+      toast.error(e?.message || "Failed to move lead");
+    }
+  };
+
+  const openConvertDialog = (mode: "client" | "contact", lead: LeadDoc) => {
+    const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "") : "";
+    const type = (lead.type || "Organization") === "Person" ? "Person" : "Organization";
+    const primary = primaryContactByLeadId.get(lead._id);
+    const pcName = displayContactName(primary);
+    const [fn, ...rest] = (pcName && pcName !== "-" ? pcName : "").split(" ").filter(Boolean);
+
+    setConvertMode(mode);
+    setMakeClientLead(lead);
+    setMakeClientStep(mode === "contact" ? "contact" : "details");
+    setMakeClientForm({
+      type,
+      name: lead.name || "",
+      owner: ownerName,
+      address: lead.address || "",
+      city: lead.city || "",
+      state: lead.state || "",
+      zip: lead.zip || "",
+      country: lead.country || "",
+      phone: lead.phone || "",
+      website: lead.website || "",
+      vatNumber: lead.vatNumber || "",
+      gstNumber: lead.gstNumber || "",
+      clientGroups: "",
+      currency: lead.currency || "",
+      currencySymbol: lead.currencySymbol || "",
+      labels: "",
+      disableOnlinePayment: false,
+      firstName: fn || "",
+      lastName: rest.join(" ") || "",
+      email: lead.email || "",
+      contactPhone: lead.phone || "",
+      skype: "",
+      jobTitle: "",
+      gender: "male",
+      password: "",
+      primaryContact: true,
+    });
+    setMakeClientOpen(true);
+  };
+
+  const createLeadContactFromForm = async (leadId: string) => {
+    const firstName = makeClientForm.firstName.trim();
+    const lastName = makeClientForm.lastName.trim();
+    if (!firstName) {
+      toast.error("First name is required");
+      return null;
+    }
+    if (!makeClientForm.email.trim()) {
+      toast.error("Email is required");
+      return null;
+    }
+    const fullName = `${firstName}${lastName ? ` ${lastName}` : ""}`.trim();
+
+    if (makeClientForm.primaryContact) {
+      const currentPrimary = contacts.filter((c) => String(c.leadId || "") === leadId && c.isPrimaryContact);
+      await Promise.all(
+        currentPrimary.map((c) =>
+          fetch(`${API_BASE}/api/contacts/${c._id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isPrimaryContact: false }),
+          })
+        )
+      );
+    }
+
+    const res = await fetch(`${API_BASE}/api/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leadId,
+        name: fullName,
+        firstName,
+        lastName,
+        jobTitle: makeClientForm.jobTitle,
+        email: makeClientForm.email.trim(),
+        phone: makeClientForm.contactPhone || makeClientForm.phone,
+        skype: makeClientForm.skype,
+        isPrimaryContact: Boolean(makeClientForm.primaryContact),
+        gender: makeClientForm.gender,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error || "Failed to create contact");
+    setContacts((p) => [json as any, ...p]);
+    return json;
+  };
+
+  const saveMakeClient = async () => {
+    try {
+      const leadId = makeClientLead?._id;
+      if (!leadId) return;
+
+      if (convertMode === "contact") {
+        await createLeadContactFromForm(leadId);
+        toast.success("Contact added");
+        setMakeClientOpen(false);
+        setMakeClientLead(null);
+        return;
+      }
+
+      const isOrg = makeClientForm.type === "Organization";
+      const payload: any = {
+        type: isOrg ? "org" : "person",
+        company: isOrg ? makeClientForm.name : "",
+        person: isOrg ? "" : makeClientForm.name,
+        owner: makeClientForm.owner,
+        address: makeClientForm.address,
+        city: makeClientForm.city,
+        state: makeClientForm.state,
+        zip: makeClientForm.zip,
+        country: makeClientForm.country,
+        phone: makeClientForm.phone,
+        website: makeClientForm.website,
+        vatNumber: makeClientForm.vatNumber,
+        gstNumber: makeClientForm.gstNumber,
+        clientGroups: makeClientForm.clientGroups
+          ? makeClientForm.clientGroups.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        currency: makeClientForm.currency,
+        currencySymbol: makeClientForm.currencySymbol,
+        labels: makeClientForm.labels
+          ? makeClientForm.labels.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        disableOnlinePayment: Boolean(makeClientForm.disableOnlinePayment),
+        // primary contact fields
+        firstName: makeClientForm.firstName,
+        lastName: makeClientForm.lastName,
+        email: makeClientForm.email,
+        phone: makeClientForm.contactPhone || makeClientForm.phone,
+        skype: makeClientForm.skype,
+        jobTitle: makeClientForm.jobTitle,
+        gender: makeClientForm.gender,
+        isPrimaryContact: Boolean(makeClientForm.primaryContact),
+      };
+
+      const res = await fetch(`${API_BASE}/api/clients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to create client");
+
+      // Also create the lead contact record for CRM contacts list (same dialog data)
+      try {
+        await createLeadContactFromForm(leadId);
+      } catch {
+        // If contact creation fails, still allow client creation
+      }
+
+      toast.success("Client created");
+      setMakeClientOpen(false);
+      setMakeClientLead(null);
+      navigate(`/clients/${json._id}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create client");
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Header actions */}
@@ -982,6 +1265,7 @@ export default function Leads() {
                     const status = lead.status || "New";
                     const variant = (STATUS_VARIANT_BY_VALUE.get(status) || "default") as any;
                     const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "-") : "-";
+                    const owner = lead.ownerId ? employees.find((e) => String(e._id) === String(lead.ownerId)) : undefined;
                     const leadLabels = Array.isArray(lead.labels) ? lead.labels.map((id) => labelById.get(id)).filter(Boolean) : [];
                     const primary = primaryContactByLeadId.get(lead._id);
                     return (
@@ -997,19 +1281,51 @@ export default function Leads() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {primary ? (
-                            <button
-                              type="button"
-                              className="text-primary underline cursor-pointer"
-                              onClick={() => navigate(`/crm/contacts/${primary._id}`)}
-                            >
-                              {displayContactName(primary)}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                {primary.avatar ? <AvatarImage src={`${API_BASE}${primary.avatar}`} alt="avatar" /> : null}
+                                <AvatarFallback className="text-[10px]">
+                                  {getInitials(displayContactName(primary))}
+                                </AvatarFallback>
+                              </Avatar>
+                              <button
+                                type="button"
+                                className="text-primary underline cursor-pointer"
+                                onClick={() => navigate(`/crm/contacts/${primary._id}`)}
+                              >
+                                {displayContactName(primary)}
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{lead.phone || "-"}</TableCell>
-                        <TableCell className="whitespace-nowrap text-primary">{ownerName}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {lead.ownerId ? (
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                {(owner?.avatar || owner?.image) ? (
+                                  <AvatarImage src={`${API_BASE}${owner?.avatar || owner?.image}`} alt="avatar" />
+                                ) : null}
+                                <AvatarFallback className="text-[10px]">{getInitials(ownerName)}</AvatarFallback>
+                              </Avatar>
+                              <button
+                                type="button"
+                                className="text-primary underline cursor-pointer"
+                                onClick={() =>
+                                  navigate(`/hrm/employees/${lead.ownerId}`, {
+                                    state: { dbId: lead.ownerId, employee: { id: 0, name: ownerName, initials: getInitials(ownerName) } },
+                                  })
+                                }
+                              >
+                                {ownerName}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <div className="flex flex-wrap gap-1">
                             {leadLabels.length ? leadLabels.map((l) => (
@@ -1048,32 +1364,140 @@ export default function Leads() {
 
         {/* Kanban */}
         <TabsContent value="kanban" className="mt-4">
-          <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
+          <div className="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 lg:mx-0 lg:px-0">
             {columns.map((c) => (
-              <div key={c.id} className="flex-shrink-0 w-[320px]">
+              <div key={c.id} className="flex-shrink-0 w-[280px]">
                 <Card className="h-full">
-                  <CardHeader className="p-4 pb-2">
+                  <CardHeader className="p-3 pb-2">
                     <div className="text-sm font-medium">{c.title}</div>
                     <div className={cn("h-0.5 mt-2 rounded", c.color)} />
                   </CardHeader>
-                  <CardContent className="p-3 pt-0 space-y-3 min-h-[280px]">
+                  <CardContent
+                    className={cn(
+                      "p-2 pt-0 space-y-2 min-h-[140px]",
+                      dragOverStatus === c.id ? "bg-muted/30" : ""
+                    )}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverStatus(c.id);
+                    }}
+                    onDragLeave={() => setDragOverStatus((s) => (s === c.id ? null : s))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const leadId = e.dataTransfer.getData("text/leadId") || draggingLeadIdRef.current;
+                      setDragOverStatus(null);
+                      if (!leadId) return;
+                      void updateLeadStatus(leadId, c.id);
+                      draggingLeadIdRef.current = null;
+                      draggingFromStatusRef.current = null;
+                    }}
+                  >
                     {kanbanGroups[c.id]?.map((lead) => (
-                      <div key={lead._id} className="kanban-card cursor-pointer" onClick={() => openEditLead(lead)}>
-                        <button
-                          type="button"
-                          className="font-medium text-sm truncate text-left"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/crm/leads/${lead._id}`);
-                          }}
-                        >
-                          {lead.name}
-                        </button>
+                      <div
+                        key={lead._id}
+                        draggable
+                        onDragStart={(e) => {
+                          draggingLeadIdRef.current = lead._id;
+                          draggingFromStatusRef.current = lead.status || "New";
+                          e.dataTransfer.setData("text/leadId", lead._id);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          draggingLeadIdRef.current = null;
+                          draggingFromStatusRef.current = null;
+                          setDragOverStatus(null);
+                        }}
+                        className="kanban-card cursor-grab active:cursor-grabbing group"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            type="button"
+                            className="font-medium text-sm truncate text-left"
+                            onClick={() => navigate(`/crm/leads/${lead._id}`)}
+                          >
+                            {lead.name}
+                          </button>
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openConvertDialog("contact", lead);
+                              }}
+                              aria-label="+ Contact"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openConvertDialog("client", lead);
+                              }}
+                              aria-label="Make client"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditLead(lead);
+                              }}
+                              aria-label="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/crm/leads/${lead._id}`, "_blank", "noopener,noreferrer");
+                              }}
+                              aria-label="Open"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+
                         <div className="text-xs text-muted-foreground mt-1">{lead.source || "-"}</div>
+
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2">
+                          <div className="inline-flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5" />
+                            <span>{kanbanCounts[String(lead._id)]?.contacts ?? (contactCountByLeadId.get(String(lead._id)) || 0)}</span>
+                          </div>
+                          <div className="inline-flex items-center gap-1">
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span>{kanbanCounts[String(lead._id)]?.files ?? 0}</span>
+                          </div>
+                          <div className="inline-flex items-center gap-1">
+                            <FileSignature className="w-3.5 h-3.5" />
+                            <span>{kanbanCounts[String(lead._id)]?.contracts ?? 0}</span>
+                          </div>
+                        </div>
+
                         <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                           <span>{formatRelative(lead.createdAt)}</span>
                           <Avatar className="h-6 w-6">
-                            <AvatarFallback>{getInitials(lead.ownerId ? employeeNameById.get(lead.ownerId) : lead.name)}</AvatarFallback>
+                            {(() => {
+                              const owner = lead.ownerId ? employees.find((e) => String(e._id) === String(lead.ownerId)) : undefined;
+                              const src = owner?.avatar || owner?.image;
+                              return src ? <AvatarImage src={`${API_BASE}${src}`} alt="avatar" /> : null;
+                            })()}
+                            <AvatarFallback>
+                              {getInitials(lead.ownerId ? employeeNameById.get(lead.ownerId) : lead.name)}
+                            </AvatarFallback>
                           </Avatar>
                         </div>
                       </div>
@@ -1083,6 +1507,165 @@ export default function Leads() {
               </div>
             ))}
           </div>
+
+          <Dialog open={makeClientOpen} onOpenChange={setMakeClientOpen}>
+            <DialogContent className="bg-card max-w-3xl" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>
+                  {convertMode === "contact"
+                    ? (makeClientLead?.name ? `+ Contact: ${makeClientLead.name}` : "+ Contact")
+                    : (makeClientLead?.name ? `Make client: ${makeClientLead.name}` : "Make client")}
+                </DialogTitle>
+              </DialogHeader>
+
+              <Tabs value={makeClientStep} onValueChange={(v) => setMakeClientStep(v as any)}>
+                <TabsList className="bg-muted/40">
+                  <TabsTrigger value="details" disabled={convertMode === "contact"}>Client details</TabsTrigger>
+                  <TabsTrigger value="contact">Client contacts</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="details" className="mt-4">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                      <Label className="sm:col-span-2 text-muted-foreground">Type</Label>
+                      <div className="sm:col-span-10">
+                        <RadioGroup
+                          value={makeClientForm.type}
+                          onValueChange={(v) => setMakeClientForm((p) => ({ ...p, type: v as any }))}
+                          className="flex items-center gap-6"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="Organization" id="client-type-org" />
+                            <Label htmlFor="client-type-org">Organization</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="Person" id="client-type-person" />
+                            <Label htmlFor="client-type-person">Person</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Name</Label>
+                      <Input value={makeClientForm.name} onChange={(e) => setMakeClientForm((p) => ({ ...p, name: e.target.value }))} />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Owner</Label>
+                      <Input value={makeClientForm.owner} onChange={(e) => setMakeClientForm((p) => ({ ...p, owner: e.target.value }))} placeholder="Owner" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Address</Label>
+                      <Textarea value={makeClientForm.address} onChange={(e) => setMakeClientForm((p) => ({ ...p, address: e.target.value }))} />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>City</Label><Input value={makeClientForm.city} onChange={(e) => setMakeClientForm((p) => ({ ...p, city: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>State</Label><Input value={makeClientForm.state} onChange={(e) => setMakeClientForm((p) => ({ ...p, state: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Zip</Label><Input value={makeClientForm.zip} onChange={(e) => setMakeClientForm((p) => ({ ...p, zip: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Country</Label><Input value={makeClientForm.country} onChange={(e) => setMakeClientForm((p) => ({ ...p, country: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Phone</Label><Input value={makeClientForm.phone} onChange={(e) => setMakeClientForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Website</Label><Input value={makeClientForm.website} onChange={(e) => setMakeClientForm((p) => ({ ...p, website: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>VAT Number</Label><Input value={makeClientForm.vatNumber} onChange={(e) => setMakeClientForm((p) => ({ ...p, vatNumber: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>GST Number</Label><Input value={makeClientForm.gstNumber} onChange={(e) => setMakeClientForm((p) => ({ ...p, gstNumber: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Client groups</Label><Input placeholder="Comma separated" value={makeClientForm.clientGroups} onChange={(e) => setMakeClientForm((p) => ({ ...p, clientGroups: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Labels</Label><Input placeholder="Comma separated" value={makeClientForm.labels} onChange={(e) => setMakeClientForm((p) => ({ ...p, labels: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Currency</Label><Input value={makeClientForm.currency} onChange={(e) => setMakeClientForm((p) => ({ ...p, currency: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Currency Symbol</Label><Input value={makeClientForm.currencySymbol} onChange={(e) => setMakeClientForm((p) => ({ ...p, currencySymbol: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="disable-online-payment"
+                        type="checkbox"
+                        checked={makeClientForm.disableOnlinePayment}
+                        onChange={(e) => setMakeClientForm((p) => ({ ...p, disableOnlinePayment: e.target.checked }))}
+                      />
+                      <Label htmlFor="disable-online-payment">Disable online payment</Label>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="contact" className="mt-4">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>First name</Label><Input value={makeClientForm.firstName} onChange={(e) => setMakeClientForm((p) => ({ ...p, firstName: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Last name</Label><Input value={makeClientForm.lastName} onChange={(e) => setMakeClientForm((p) => ({ ...p, lastName: e.target.value }))} /></div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Email</Label><Input type="email" value={makeClientForm.email} onChange={(e) => setMakeClientForm((p) => ({ ...p, email: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Phone</Label><Input value={makeClientForm.contactPhone} onChange={(e) => setMakeClientForm((p) => ({ ...p, contactPhone: e.target.value }))} /></div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Skype</Label><Input value={makeClientForm.skype} onChange={(e) => setMakeClientForm((p) => ({ ...p, skype: e.target.value }))} /></div>
+                      <div className="space-y-1"><Label>Job Title</Label><Input value={makeClientForm.jobTitle} onChange={(e) => setMakeClientForm((p) => ({ ...p, jobTitle: e.target.value }))} /></div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Gender</Label>
+                      <RadioGroup
+                        value={makeClientForm.gender}
+                        onValueChange={(v) => setMakeClientForm((p) => ({ ...p, gender: v as any }))}
+                        className="flex items-center gap-6"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="male" id="gender-male" />
+                          <Label htmlFor="gender-male">Male</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="female" id="gender-female" />
+                          <Label htmlFor="gender-female">Female</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="other" id="gender-other" />
+                          <Label htmlFor="gender-other">Other</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1"><Label>Password</Label><Input type="password" value={makeClientForm.password} onChange={(e) => setMakeClientForm((p) => ({ ...p, password: e.target.value }))} placeholder="Password" /></div>
+                      <div className="flex items-center gap-2 mt-6">
+                        <input
+                          id="primary-contact"
+                          type="checkbox"
+                          checked={makeClientForm.primaryContact}
+                          onChange={(e) => setMakeClientForm((p) => ({ ...p, primaryContact: e.target.checked }))}
+                        />
+                        <Label htmlFor="primary-contact">Primary contact</Label>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" onClick={() => setMakeClientOpen(false)}>Close</Button>
+                {makeClientStep === "contact" ? (
+                  <Button type="button" variant="outline" onClick={() => setMakeClientStep("details")}>Previous</Button>
+                ) : null}
+                {makeClientStep === "details" ? (
+                  <Button type="button" onClick={() => setMakeClientStep("contact")}>Next</Button>
+                ) : (
+                  <Button type="button" onClick={saveMakeClient}>Save</Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>

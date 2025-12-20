@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, format, parseISO } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, Dialog
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Plus, Tag, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const API_BASE = "http://localhost:5000";
 
 interface CalendarEvent {
   id: string;
@@ -32,6 +34,14 @@ interface CalendarEvent {
 interface LabelDef {
   name: string;
   color: "primary" | "indigo" | "success" | "warning" | "destructive";
+}
+
+interface ClientRow {
+  _id: string;
+  company?: string;
+  person?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 const initialLabels: LabelDef[] = [
@@ -63,6 +73,8 @@ export default function Events() {
   const [events, setEvents] = useState<CalendarEvent[]>(sampleEvents);
   const [labelFilter, setLabelFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  const [clients, setClients] = useState<ClientRow[]>([]);
 
   const monthLabel = format(currentMonth, "MMMM yyyy");
 
@@ -102,14 +114,41 @@ export default function Events() {
   const [newType, setNewType] = useState("Meeting");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
-  const [client, setClient] = useState("-");
+  const [clientId, setClientId] = useState("-");
   const [share, setShare] = useState<"me" | "all" | "specific">("all");
   const [repeat, setRepeat] = useState(false);
   const [colorClass, setColorClass] = useState<string>("");
   const uploadRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/clients`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setClients(Array.isArray(data) ? data : []);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const clientNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clients) {
+      const name =
+        c.company?.trim() ||
+        c.person?.trim() ||
+        `${c.firstName || ""} ${c.lastName || ""}`.trim() ||
+        "-";
+      if (c._id) m.set(c._id, name);
+    }
+    return m;
+  }, [clients]);
+
   const addEvent = () => {
     if (!newTitle.trim()) return;
+    const selectedClientName = clientId !== "-" ? (clientNameById.get(clientId) || "-") : "-";
     setEvents((prev) => [
       ...prev,
       {
@@ -121,7 +160,7 @@ export default function Events() {
         endTime,
         description,
         location,
-        client,
+        client: selectedClientName,
         share,
         repeat,
         colorClass: colorClass || undefined,
@@ -282,14 +321,24 @@ export default function Events() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label>Client</Label>
-                    <Select value={client} onValueChange={setClient}>
+                    <Select value={clientId} onValueChange={setClientId}>
                       <SelectTrigger>
                         <SelectValue placeholder="-" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="-">-</SelectItem>
-                        <SelectItem value="Acme">Acme</SelectItem>
-                        <SelectItem value="Globex">Globex</SelectItem>
+                        {clients.map((c) => {
+                          const name =
+                            c.company?.trim() ||
+                            c.person?.trim() ||
+                            `${c.firstName || ""} ${c.lastName || ""}`.trim() ||
+                            "-";
+                          return (
+                            <SelectItem key={c._id} value={c._id}>
+                              {name}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>

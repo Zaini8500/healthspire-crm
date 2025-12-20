@@ -22,7 +22,6 @@ export default function EstimatePreview() {
   const navigate = useNavigate();
   const location = useLocation();
   const [est, setEst] = useState<any | null>(null);
-  const [loadError, setLoadError] = useState<string>("");
   const pdfTargetRef = useRef<HTMLDivElement | null>(null);
   const autoCloseRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -41,17 +40,11 @@ export default function EstimatePreview() {
     if (!id) return;
     (async () => {
       try {
-        setLoadError("");
         const r = await fetch(`${API_BASE}/api/estimates/${id}`);
-        if (!r.ok) {
-          setLoadError("Failed to load estimate");
-          return;
-        }
+        if (!r.ok) return;
         const row = await r.json();
         setEst(row);
-      } catch {
-        setLoadError("Backend not reachable");
-      }
+      } catch {}
     })();
   }, [id]);
 
@@ -111,22 +104,6 @@ export default function EstimatePreview() {
       return true;
     }
   }, []);
-
-  if (!est) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-        <div className="bg-white border rounded-lg shadow-sm p-6 max-w-md w-full text-center space-y-3">
-          <div className="text-lg font-semibold">Loading estimate…</div>
-          {loadError ? (
-            <div className="text-sm text-red-600">{loadError} (API: {API_BASE})</div>
-          ) : (
-            <div className="text-sm text-gray-600">Please wait.</div>
-          )}
-          <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     const shouldAutoClose = viewMode.isPrint || viewMode.isPdf;

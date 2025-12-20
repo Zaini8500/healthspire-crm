@@ -50,9 +50,6 @@ const navigation: NavItem[] = [
     icon: Target,
     children: [
       { title: "Leads", href: "/crm/leads" },
-      { title: "Contacts", href: "/crm/contacts" },
-      { title: "Companies", href: "/crm/companies" },
-      { title: "Pipeline", href: "/crm/pipeline" },
     ],
   },
 
@@ -116,6 +113,7 @@ const navigation: NavItem[] = [
   { title: "Tickets", href: "/tickets", icon: Ticket },
   { title: "Events", href: "/events", icon: Calendar },
   { title: "Clients", href: "/clients", icon: Users },
+  { title: "Tasks", href: "/tasks", icon: CheckSquare },
   { title: "Messages", href: "/messages", icon: MessageSquare },
   { title: "Announcements", href: "/announcements", icon: Megaphone },
   { title: "Subscriptions", href: "/subscriptions", icon: CreditCard },

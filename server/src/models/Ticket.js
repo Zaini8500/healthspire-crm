@@ -2,14 +2,27 @@ import mongoose from "mongoose";
 
 const TicketSchema = new mongoose.Schema(
   {
+    ticketNo: { type: Number },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     client: { type: String, default: "" },
     title: { type: String, required: true },
+    description: { type: String, default: "" },
+    requestedBy: { type: String, default: "" },
     type: { type: String, default: "general" },
     labels: { type: [String], default: [] },
     assignedTo: { type: String, default: "" },
     status: { type: String, default: "open" },
     lastActivity: { type: Date },
+    messages: {
+      type: [
+        {
+          text: { type: String, default: "" },
+          createdBy: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

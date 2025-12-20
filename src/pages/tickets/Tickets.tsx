@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,38 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, Dialog
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MoreHorizontal, Plus, RefreshCw, Search, Settings, Tags, Paperclip, Mic } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { CheckCircle2, Edit, MoreHorizontal, Plus, RefreshCw, Search, Settings, Tags, Trash2, Paperclip, Mic } from "lucide-react";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+
+const API_BASE = "http://localhost:5000";
+
+type ClientDoc = { _id: string; company?: string; person?: string };
+type EmployeeDoc = { _id: string; name?: string; email?: string };
+type TicketLabelDoc = { _id: string; name: string; color?: string };
+
+type TicketDoc = {
+  _id: string;
+  ticketNo?: number;
+  clientId?: string;
+  client?: string;
+  title: string;
+  description?: string;
+  requestedBy?: string;
+  type?: string;
+  labels?: string[];
+  assignedTo?: string;
+  status?: string;
+  lastActivity?: string;
+  createdAt?: string;
+};
+
+const clientDisplayName = (c: ClientDoc) => c.company || c.person || "Unnamed";
+const employeeDisplayName = (e: EmployeeDoc) => e.name || e.email || "Unnamed";
 
 export default function Tickets() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState("list");
   const [query, setQuery] = useState("");
   const [client, setClient] = useState("-");
@@ -20,7 +49,239 @@ export default function Tickets() {
   const [assigned, setAssigned] = useState("-");
   const [created, setCreated] = useState("-");
   const [status, setStatus] = useState("Status");
-  const [selectedColor, setSelectedColor] = useState<string>("blue");
+
+  const [clients, setClients] = useState<ClientDoc[]>([]);
+  const [employees, setEmployees] = useState<EmployeeDoc[]>([]);
+  const [ticketLabels, setTicketLabels] = useState<TicketLabelDoc[]>([]);
+  const [tickets, setTickets] = useState<TicketDoc[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [openAddTicket, setOpenAddTicket] = useState(false);
+  const [openManageLabels, setOpenManageLabels] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<TicketDoc | null>(null);
+
+  const [selectedColor, setSelectedColor] = useState<string>("#4F46E5");
+  const [newLabelName, setNewLabelName] = useState("");
+
+  const [ticketTitle, setTicketTitle] = useState("");
+  const [ticketClientId, setTicketClientId] = useState("-");
+  const [ticketRequestedBy, setTicketRequestedBy] = useState("-");
+  const [ticketType, setTicketType] = useState("general");
+  const [ticketDescription, setTicketDescription] = useState("");
+  const [ticketAssignedTo, setTicketAssignedTo] = useState("-");
+  const [ticketLabel, setTicketLabel] = useState("-");
+
+  const labelColorByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of ticketLabels) {
+      if (l?.name) m.set(l.name, l.color || "#4F46E5");
+    }
+    return m;
+  }, [ticketLabels]);
+
+  const loadClients = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/clients`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to load clients");
+      setClients(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load clients");
+    }
+  };
+
+  const loadEmployees = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/employees`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to load employees");
+      setEmployees(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load employees");
+    }
+  };
+
+  const loadTicketLabels = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/ticket-labels`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to load labels");
+      setTicketLabels(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load labels");
+    }
+  };
+
+  const loadTickets = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      if (client !== "-") params.set("clientId", client);
+      const res = await fetch(`${API_BASE}/api/tickets?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to load tickets");
+      setTickets(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load tickets");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadClients();
+    loadEmployees();
+    loadTicketLabels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, client]);
+
+  const clearFilters = () => {
+    setQuery("");
+    setClient("-");
+    setType("-");
+    setLabel("-");
+    setAssigned("-");
+    setCreated("-");
+    setStatus("Status");
+  };
+
+  const resetTicketForm = () => {
+    setTicketTitle("");
+    setTicketClientId("-");
+    setTicketRequestedBy("-");
+    setTicketType("general");
+    setTicketDescription("");
+    setTicketAssignedTo("-");
+    setTicketLabel("-");
+    setEditingTicket(null);
+  };
+
+  const openEditTicket = (t: TicketDoc) => {
+    setEditingTicket(t);
+    setTicketTitle(t.title || "");
+    setTicketClientId(t.clientId || "-");
+    setTicketRequestedBy(t.requestedBy || "-");
+    setTicketType(t.type || "general");
+    setTicketDescription(t.description || "");
+    setTicketAssignedTo(t.assignedTo || "-");
+    setTicketLabel((t.labels || [])[0] || "-");
+    setOpenAddTicket(true);
+  };
+
+  const saveTicket = async () => {
+    const title = ticketTitle.trim();
+    if (!title) {
+      toast.error("Title is required");
+      return;
+    }
+    const clientDoc = clients.find((c) => c._id === ticketClientId);
+    const payload: any = {
+      title,
+      description: ticketDescription || "",
+      type: ticketType || "general",
+      assignedTo: ticketAssignedTo !== "-" ? ticketAssignedTo : "",
+      requestedBy: ticketRequestedBy !== "-" ? ticketRequestedBy : "",
+      status: "open",
+      lastActivity: new Date().toISOString(),
+    };
+    if (ticketClientId !== "-") {
+      payload.clientId = ticketClientId;
+      payload.client = clientDoc ? clientDisplayName(clientDoc) : "";
+    }
+    if (ticketLabel !== "-") payload.labels = [ticketLabel];
+    try {
+      const isEdit = Boolean(editingTicket?._id);
+      const url = isEdit ? `${API_BASE}/api/tickets/${editingTicket!._id}` : `${API_BASE}/api/tickets`;
+      const method = isEdit ? "PUT" : "POST";
+
+      if (isEdit) {
+        payload.status = editingTicket?.status || payload.status;
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || (isEdit ? "Failed to update ticket" : "Failed to create ticket"));
+      toast.success(isEdit ? "Ticket updated" : "Ticket saved");
+      setOpenAddTicket(false);
+      resetTicketForm();
+      await loadTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save ticket");
+    }
+  };
+
+  const setTicketStatus = async (t: TicketDoc, nextStatus: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/tickets/${t._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus, lastActivity: new Date().toISOString() }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to update ticket");
+      toast.success(nextStatus === "closed" ? "Marked as Closed" : "Marked as Open");
+      await loadTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update ticket");
+    }
+  };
+
+  const deleteTicket = async (id: string) => {
+    const ok = window.confirm("Delete this ticket?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/tickets/${id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to delete");
+      toast.success("Ticket deleted");
+      await loadTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete ticket");
+    }
+  };
+
+  const addTicketLabel = async () => {
+    const name = newLabelName.trim();
+    if (!name) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/ticket-labels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, color: selectedColor }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to add label");
+      toast.success("Label saved");
+      setNewLabelName("");
+      await loadTicketLabels();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save label");
+    }
+  };
+
+  const deleteTicketLabel = async (id: string) => {
+    const ok = window.confirm("Delete this label?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/ticket-labels/${id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      toast.success("Label deleted");
+      await loadTicketLabels();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete label");
+    }
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -28,7 +289,7 @@ export default function Tickets() {
         <h1 className="text-base font-semibold">Tickets</h1>
         <div className="flex items-center gap-2">
           {/* Manage labels dialog */}
-          <Dialog>
+          <Dialog open={openManageLabels} onOpenChange={setOpenManageLabels}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2"><Tags className="w-4 h-4"/> Manage labels</Button>
             </DialogTrigger>
@@ -39,26 +300,58 @@ export default function Tickets() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   {[
-                    "bg-lime-500","bg-green-500","bg-teal-500","bg-cyan-500","bg-slate-300",
-                    "bg-orange-500","bg-amber-500","bg-red-500","bg-pink-500","bg-fuchsia-600",
-                    "bg-sky-500","bg-slate-600","bg-blue-600","bg-violet-500","bg-purple-300",
+                    "#84cc16","#22c55e","#14b8a6","#06b6d4","#cbd5e1",
+                    "#f97316","#f59e0b","#ef4444","#ec4899","#c026d3",
+                    "#0ea5e9","#475569","#2563eb","#8b5cf6","#d8b4fe",
                   ].map((c, i) => (
                     <button
                       key={i}
                       onClick={() => setSelectedColor(c)}
-                      className={`h-6 w-6 rounded-full border ${c} ${selectedColor===c?"ring-2 ring-offset-2 ring-primary":""}`}
+                      className={`h-6 w-6 rounded-full border ${selectedColor===c?"ring-2 ring-offset-2 ring-primary":""}`}
+                      style={{ backgroundColor: c }}
                       aria-label={`color-${i}`}
                     />
                   ))}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Label</Label>
-                  <Input placeholder="Label" className="md:col-span-4" />
+                  <Input placeholder="Label" className="md:col-span-4" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} />
+                </div>
+
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead>Label</TableHead>
+                        <TableHead>Color</TableHead>
+                        <TableHead className="w-24"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ticketLabels.length ? (
+                        ticketLabels.map((l) => (
+                          <TableRow key={l._id}>
+                            <TableCell className="font-medium">{l.name}</TableCell>
+                            <TableCell>
+                              <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: l.color || "#4F46E5" }} />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="outline" size="sm" onClick={() => deleteTicketLabel(l._id)}>Delete</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">No labels</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
               <DialogFooter className="gap-2">
-                <Button variant="outline">Close</Button>
-                <Button>Save</Button>
+                <Button variant="outline" onClick={() => setOpenManageLabels(false)}>Close</Button>
+                <Button onClick={addTicketLabel}>Save</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -84,62 +377,87 @@ export default function Tickets() {
           </Dialog>
 
           {/* Add ticket dialog */}
-          <Dialog>
+          <Dialog
+            open={openAddTicket}
+            onOpenChange={(o) => {
+              setOpenAddTicket(o);
+              if (!o) resetTicketForm();
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2"><Plus className="w-4 h-4"/> Add ticket</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
-                <DialogTitle>Add ticket</DialogTitle>
+                <DialogTitle>{editingTicket ? "Edit ticket" : "Add ticket"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Title</Label>
-                  <Input placeholder="Title" className="md:col-span-4" />
+                  <Input placeholder="Title" className="md:col-span-4" value={ticketTitle} onChange={(e) => setTicketTitle(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Client</Label>
-                  <Select value={client} onValueChange={setClient}>
+                  <Select value={ticketClientId} onValueChange={setTicketClientId}>
                     <SelectTrigger className="md:col-span-4"><SelectValue placeholder="-"/></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="-">-</SelectItem>
+                      {clients.map((c) => (
+                        <SelectItem key={c._id} value={c._id}>{clientDisplayName(c)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Requested by</Label>
-                  <Select>
+                  <Select value={ticketRequestedBy} onValueChange={setTicketRequestedBy}>
                     <SelectTrigger className="md:col-span-4"><SelectValue placeholder="Requested by"/></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="-">-</SelectItem>
+                      {clients.map((c) => (
+                        <SelectItem key={c._id} value={clientDisplayName(c)}>{clientDisplayName(c)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Ticket type</Label>
-                  <Select>
+                  <Select value={ticketType} onValueChange={setTicketType}>
                     <SelectTrigger className="md:col-span-4"><SelectValue placeholder="General Support"/></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="general">General Support</SelectItem>
+                      <SelectItem value="billing">Billing</SelectItem>
+                      <SelectItem value="technical">Technical</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
                   <Label className="md:text-right pt-2 text-muted-foreground">Description</Label>
-                  <Textarea placeholder="Description" className="md:col-span-4 min-h-[120px]" />
+                  <Textarea placeholder="Description" className="md:col-span-4 min-h-[120px]" value={ticketDescription} onChange={(e) => setTicketDescription(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Assign to</Label>
-                  <Select>
+                  <Select value={ticketAssignedTo} onValueChange={setTicketAssignedTo}>
                     <SelectTrigger className="md:col-span-4"><SelectValue placeholder="-"/></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="-">-</SelectItem>
+                      {employees.map((e) => (
+                        <SelectItem key={e._id} value={employeeDisplayName(e)}>{employeeDisplayName(e)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Labels</Label>
-                  <Input placeholder="Labels" className="md:col-span-4" />
+                  <Select value={ticketLabel} onValueChange={setTicketLabel}>
+                    <SelectTrigger className="md:col-span-4"><SelectValue placeholder="-"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="-">-</SelectItem>
+                      {ticketLabels.map((l) => (
+                        <SelectItem key={l._id} value={l.name}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -148,8 +466,16 @@ export default function Tickets() {
                   <Button variant="outline" size="icon" aria-label="voice"><Mic className="w-4 h-4"/></Button>
                 </div>
                 <DialogFooter className="gap-2">
-                  <Button variant="outline">Close</Button>
-                  <Button>Save</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setOpenAddTicket(false);
+                      resetTicketForm();
+                    }}
+                  >
+                    Close
+                  </Button>
+                  <Button onClick={saveTicket}>Save</Button>
                 </DialogFooter>
               </div>
             </DialogContent>
@@ -231,24 +557,36 @@ export default function Tickets() {
                   <SelectTrigger className="w-40"><SelectValue placeholder="- Client -"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="-">- Client -</SelectItem>
+                    {clients.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>{clientDisplayName(c)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select value={type} onValueChange={setType}>
                   <SelectTrigger className="w-40"><SelectValue placeholder="- Ticket type -"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="-">- Ticket type -</SelectItem>
+                    <SelectItem value="general">General Support</SelectItem>
+                    <SelectItem value="billing">Billing</SelectItem>
+                    <SelectItem value="technical">Technical</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={label} onValueChange={setLabel}>
                   <SelectTrigger className="w-40"><SelectValue placeholder="- Label -"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="-">- Label -</SelectItem>
+                    {ticketLabels.map((l) => (
+                      <SelectItem key={l._id} value={l.name}>{l.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select value={assigned} onValueChange={setAssigned}>
                   <SelectTrigger className="w-40"><SelectValue placeholder="- Assigned to -"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="-">- Assigned to -</SelectItem>
+                    {employees.map((e) => (
+                      <SelectItem key={e._id} value={employeeDisplayName(e)}>{employeeDisplayName(e)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select value={created} onValueChange={setCreated}>
@@ -261,10 +599,12 @@ export default function Tickets() {
                   <SelectTrigger className="w-32"><SelectValue placeholder="Status"/></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Status">Status</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="success" size="icon" aria-label="refresh"><RefreshCw className="w-4 h-4"/></Button>
-                <Button variant="outline" size="icon" aria-label="clear">✕</Button>
+                <Button variant="success" size="icon" aria-label="refresh" onClick={loadTickets}><RefreshCw className="w-4 h-4"/></Button>
+                <Button variant="outline" size="icon" aria-label="clear" onClick={clearFilters}>✕</Button>
               </div>
 
               <Table>
@@ -282,9 +622,92 @@ export default function Tickets() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">No record found.</TableCell>
-                  </TableRow>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">Loading...</TableCell>
+                    </TableRow>
+                  ) : tickets.length ? (
+                    tickets
+                      .filter((t) => (type === "-" ? true : (t.type || "general") === type))
+                      .filter((t) => (label === "-" ? true : (t.labels || []).includes(label)))
+                      .filter((t) => (assigned === "-" ? true : (t.assignedTo || "") === assigned))
+                      .filter((t) => (status === "Status" ? true : (t.status || "open") === status))
+                      .map((t) => (
+                        <TableRow key={t._id}>
+                          <TableCell className="font-medium">
+                            <button
+                              type="button"
+                              className="text-left hover:underline"
+                              onClick={() => navigate(`/tickets/${t._id}`)}
+                            >
+                              {t.ticketNo ? `#${t.ticketNo}` : t._id.slice(-6)}
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="text-left hover:underline"
+                              onClick={() => navigate(`/tickets/${t._id}`)}
+                            >
+                              {t.title}
+                            </button>
+                          </TableCell>
+                          <TableCell>{t.client || "-"}</TableCell>
+                          <TableCell>{t.type || "general"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {(t.labels || []).length ? (
+                                (t.labels || []).map((ln) => (
+                                  <span
+                                    key={ln}
+                                    className="text-xs px-2 py-0.5 rounded-full border"
+                                    style={{ borderColor: labelColorByName.get(ln) || "#4F46E5" }}
+                                  >
+                                    {ln}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{t.assignedTo || "-"}</TableCell>
+                          <TableCell>{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : "-"}</TableCell>
+                          <TableCell className="capitalize">{t.status || "open"}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button type="button" variant="ghost" size="icon-sm" aria-label="actions">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openEditTicket(t)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setTicketStatus(t, (t.status || "open") === "closed" ? "open" : "closed")}
+                                  >
+                                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                                    {(t.status || "open") === "closed" ? "Mark as Open" : "Mark as Closed"}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => deleteTicket(t._id)} className="text-destructive">
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TabsContent>

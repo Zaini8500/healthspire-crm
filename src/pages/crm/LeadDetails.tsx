@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import Events from "../events/Events";
 import Files from "../files/Files";
 import Notes from "../notes/Notes";
-import { TasksOverview } from "@/components/dashboard/TasksOverview";
+import { Paperclip, Mic, ExternalLink as ExternalLinkIcon } from "lucide-react";
 import {
   Check,
   Download,
@@ -92,6 +92,23 @@ type ReminderDoc = {
   title?: string;
   dueAt?: string;
   repeat?: boolean;
+  createdAt?: string;
+};
+
+type TaskDoc = {
+  _id: string;
+  leadId?: string;
+  title?: string;
+  description?: string;
+  points?: number;
+  status?: string;
+  priority?: string;
+  start?: string;
+  deadline?: string;
+  assignees?: Array<{ name?: string; initials?: string }>;
+  collaborators?: string[];
+  tags?: string[];
+  attachments?: number;
   createdAt?: string;
 };
 
@@ -209,6 +226,16 @@ function formatYmd(iso?: string) {
   }
 }
 
+function statusLabel(s?: string) {
+  const v = (s || "").toLowerCase();
+  if (v === "in-progress") return "In progress";
+  if (v === "todo") return "To do";
+  if (v === "done") return "Done";
+  if (v === "backlog") return "Backlog";
+  if (v === "review") return "Review";
+  return s || "-";
+}
+
 export default function LeadDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -219,6 +246,12 @@ export default function LeadDetails() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [labels, setLabels] = useState<LeadLabel[]>([]);
   const [projects, setProjects] = useState<ProjectDoc[]>([]);
+
+  const employeeNames = useMemo(() => {
+    return (employees || [])
+      .map((e) => (e.name || `${e.firstName || ""} ${e.lastName || ""}`.trim() || "").trim())
+      .filter(Boolean);
+  }, [employees]);
 
   const [lead, setLead] = useState<LeadDoc | null>(null);
   const [leadForm, setLeadForm] = useState({
@@ -244,6 +277,155 @@ export default function LeadDetails() {
 
   const [contacts, setContacts] = useState<ContactDoc[]>([]);
   const [contactsQuery, setContactsQuery] = useState("");
+
+  const [tasks, setTasks] = useState<TaskDoc[]>([]);
+  const [tasksQuery, setTasksQuery] = useState("");
+  const [openAddTask, setOpenAddTask] = useState(false);
+  const [taskUploading, setTaskUploading] = useState(false);
+  const taskFilesRef = useRef<HTMLInputElement>(null);
+  const [taskSelectedFiles, setTaskSelectedFiles] = useState<File[]>([]);
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    points: "1",
+    assignTo: "",
+    collaborators: "",
+    status: "todo",
+    priority: "medium",
+    labels: "",
+    start: "",
+    deadline: "",
+  });
+
+  const loadTasks = async () => {
+    if (!id) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("leadId", id);
+      const q = (tasksQuery || "").trim();
+      if (q) params.set("q", q);
+      const r = await fetch(`${API_BASE}/api/tasks?${params.toString()}`);
+      if (r.ok) {
+        const d = await r.json();
+        setTasks(Array.isArray(d) ? d : []);
+      }
+    } catch {
+      setTasks([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "tasks") return;
+    const t = window.setTimeout(() => {
+      loadTasks();
+    }, 200);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, tasksQuery, id]);
+
+  const resetTaskForm = () => {
+    setTaskForm({
+      title: "",
+      description: "",
+      points: "1",
+      assignTo: "",
+      collaborators: "",
+      status: "todo",
+      priority: "medium",
+      labels: "",
+      start: "",
+      deadline: "",
+    });
+    setTaskSelectedFiles([]);
+  };
+
+  const uploadTaskFiles = async () => {
+    if (!taskSelectedFiles.length || !id) return 0;
+    setTaskUploading(true);
+    try {
+      let uploaded = 0;
+      for (const f of taskSelectedFiles) {
+        const fd = new FormData();
+        fd.append("file", f);
+        fd.append("leadId", id);
+        fd.append("name", f.name);
+        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+        if (r.ok) uploaded += 1;
+      }
+      return uploaded;
+    } catch {
+      return 0;
+    } finally {
+      setTaskUploading(false);
+    }
+  };
+
+  const saveTask = async (mode: "save" | "save_show") => {
+    if (!id) return;
+    const title = (taskForm.title || "").trim();
+    if (!title) return;
+
+    const attachmentsUploaded = await uploadTaskFiles();
+    const payload: any = {
+      leadId: id,
+      title,
+      description: (taskForm.description || "").trim() || undefined,
+      points: taskForm.points ? Number(taskForm.points) : undefined,
+      status: taskForm.status,
+      priority: taskForm.priority,
+      start: taskForm.start || undefined,
+      deadline: taskForm.deadline || undefined,
+      assignees: taskForm.assignTo ? [{ name: taskForm.assignTo, initials: taskForm.assignTo.slice(0, 2).toUpperCase() }] : [],
+      collaborators: (taskForm.collaborators || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      tags: (taskForm.labels || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      attachments: attachmentsUploaded,
+    };
+
+    try {
+      const r = await fetch(`${API_BASE}/api/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) {
+        const created = await r.json();
+        setTasks((prev) => [created, ...prev]);
+        toast.success("Task added");
+        setOpenAddTask(false);
+        resetTaskForm();
+        if (mode === "save_show") navigate(`/tasks/${created._id}`);
+        return;
+      }
+    } catch {
+    }
+
+    // fallback optimistic
+    const optimistic: TaskDoc = {
+      _id: crypto.randomUUID(),
+      leadId: id,
+      title,
+      description: payload.description,
+      points: payload.points,
+      status: payload.status,
+      priority: payload.priority,
+      start: payload.start,
+      deadline: payload.deadline,
+      assignees: payload.assignees,
+      collaborators: payload.collaborators,
+      tags: payload.tags,
+      attachments: payload.attachments,
+    };
+    setTasks((prev) => [optimistic, ...prev]);
+    setOpenAddTask(false);
+    resetTaskForm();
+    if (mode === "save_show") navigate(`/tasks/${optimistic._id}`);
+  };
 
   const [openReminders, setOpenReminders] = useState(false);
   const [remindersLoading, setRemindersLoading] = useState(false);
@@ -307,6 +489,38 @@ export default function LeadDetails() {
     skype: "",
     isPrimaryContact: false,
     gender: "" as "male" | "female" | "other" | "",
+  });
+
+  const [convertMode, setConvertMode] = useState<"client" | "contact">("client");
+  const [makeClientOpen, setMakeClientOpen] = useState(false);
+  const [makeClientStep, setMakeClientStep] = useState<"details" | "contact">("details");
+  const [makeClientForm, setMakeClientForm] = useState({
+    type: "Organization" as "Organization" | "Person",
+    name: "",
+    owner: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    country: "",
+    phone: "",
+    website: "",
+    vatNumber: "",
+    gstNumber: "",
+    clientGroups: "",
+    labels: "",
+    currency: "",
+    currencySymbol: "",
+    disableOnlinePayment: false,
+    firstName: "",
+    lastName: "",
+    email: "",
+    contactPhone: "",
+    skype: "",
+    jobTitle: "",
+    gender: "male" as "male" | "female" | "other",
+    password: "",
+    primaryContact: true,
   });
 
   const contactsPrintRef = useRef<HTMLDivElement>(null);
@@ -1313,29 +1527,138 @@ export default function LeadDetails() {
     w.document.close();
   };
 
-  const makeClient = async () => {
+  const openConvertDialog = (mode: "client" | "contact") => {
     if (!lead) return;
-    try {
-      const type = lead.type === "Person" ? "person" : "org";
-      const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "") : "";
+    const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "") : "";
+    const primary = contacts.find((c) => c.isPrimaryContact);
+    const full = (primary?.name || "").trim();
+    const [fn, ...rest] = full.split(" ").filter(Boolean);
+    const ln = rest.join(" ").trim();
 
+    setConvertMode(mode);
+    setMakeClientStep(mode === "contact" ? "contact" : "details");
+    setMakeClientForm({
+      type: lead.type || "Organization",
+      name: lead.name || "",
+      owner: ownerName,
+      address: lead.address || "",
+      city: lead.city || "",
+      state: lead.state || "",
+      zip: lead.zip || "",
+      country: lead.country || "",
+      phone: lead.phone || "",
+      website: lead.website || "",
+      vatNumber: lead.vatNumber || "",
+      gstNumber: lead.gstNumber || "",
+      clientGroups: "",
+      labels: "",
+      currency: lead.currency || "",
+      currencySymbol: lead.currencySymbol || "",
+      disableOnlinePayment: false,
+      firstName: primary?.firstName || fn || "",
+      lastName: primary?.lastName || ln || "",
+      email: primary?.email || lead.email || "",
+      contactPhone: primary?.phone || lead.phone || "",
+      skype: primary?.skype || "",
+      jobTitle: primary?.jobTitle || "",
+      gender: (primary?.gender as any) || "male",
+      password: "",
+      primaryContact: true,
+    });
+    setMakeClientOpen(true);
+  };
+
+  const createLeadContactFromForm = async (leadId: string) => {
+    const firstName = makeClientForm.firstName.trim();
+    const lastName = makeClientForm.lastName.trim();
+    if (!firstName) {
+      toast.error("First name is required");
+      return null;
+    }
+    if (!makeClientForm.email.trim()) {
+      toast.error("Email is required");
+      return null;
+    }
+    const fullName = `${firstName}${lastName ? ` ${lastName}` : ""}`.trim();
+
+    if (makeClientForm.primaryContact) {
+      await Promise.all(
+        contacts
+          .filter((c) => c.isPrimaryContact)
+          .map((c) =>
+            fetch(`${API_BASE}/api/contacts/${c._id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ isPrimaryContact: false }),
+            })
+          )
+      );
+    }
+
+    const res = await fetch(`${API_BASE}/api/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        leadId,
+        name: fullName,
+        firstName,
+        lastName,
+        jobTitle: makeClientForm.jobTitle,
+        email: makeClientForm.email.trim(),
+        phone: makeClientForm.contactPhone || makeClientForm.phone,
+        skype: makeClientForm.skype,
+        isPrimaryContact: Boolean(makeClientForm.primaryContact),
+        gender: makeClientForm.gender,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error || "Failed to create contact");
+    return json;
+  };
+
+  const saveMakeClient = async () => {
+    if (!lead || !id) return;
+    try {
+      if (convertMode === "contact") {
+        await createLeadContactFromForm(id);
+        toast.success("Contact added");
+        setMakeClientOpen(false);
+        await loadContacts();
+        return;
+      }
+
+      const isOrg = makeClientForm.type === "Organization";
       const payload: any = {
-        type,
-        company: type === "org" ? lead.name : (lead.company || ""),
-        person: type === "person" ? lead.name : "",
-        owner: ownerName,
-        email: lead.email || "",
-        phone: lead.phone || "",
-        website: lead.website || "",
-        address: lead.address || "",
-        city: lead.city || "",
-        state: lead.state || "",
-        zip: lead.zip || "",
-        country: lead.country || "",
-        vatNumber: lead.vatNumber || "",
-        gstNumber: lead.gstNumber || "",
-        currency: lead.currency || "",
-        currencySymbol: lead.currencySymbol || "",
+        type: isOrg ? "org" : "person",
+        company: isOrg ? makeClientForm.name : "",
+        person: isOrg ? "" : makeClientForm.name,
+        owner: makeClientForm.owner,
+        email: makeClientForm.email.trim(),
+        phone: makeClientForm.phone,
+        website: makeClientForm.website,
+        address: makeClientForm.address,
+        city: makeClientForm.city,
+        state: makeClientForm.state,
+        zip: makeClientForm.zip,
+        country: makeClientForm.country,
+        vatNumber: makeClientForm.vatNumber,
+        gstNumber: makeClientForm.gstNumber,
+        currency: makeClientForm.currency,
+        currencySymbol: makeClientForm.currencySymbol,
+        clientGroups: makeClientForm.clientGroups,
+        labels: makeClientForm.labels,
+        disableOnlinePayment: Boolean(makeClientForm.disableOnlinePayment),
+        primaryContact: {
+          firstName: makeClientForm.firstName.trim(),
+          lastName: makeClientForm.lastName.trim(),
+          email: makeClientForm.email.trim(),
+          phone: makeClientForm.contactPhone || makeClientForm.phone,
+          skype: makeClientForm.skype,
+          jobTitle: makeClientForm.jobTitle,
+          gender: makeClientForm.gender,
+          password: makeClientForm.password,
+          isPrimaryContact: Boolean(makeClientForm.primaryContact),
+        },
       };
 
       const res = await fetch(`${API_BASE}/api/clients`, {
@@ -1344,8 +1667,17 @@ export default function LeadDetails() {
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "Failed");
+      if (!res.ok) throw new Error(json?.error || "Failed to create client");
+
+      try {
+        await createLeadContactFromForm(id);
+      } catch {
+        // ignore
+      }
+
       toast.success("Client created");
+      setMakeClientOpen(false);
+      await loadContacts();
       if (json?._id) navigate(`/clients/${json._id}`);
     } catch (e: any) {
       toast.error(e?.message || "Failed to create client");
@@ -1374,9 +1706,168 @@ export default function LeadDetails() {
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" onClick={() => setOpenReminders(true)}>Reminders</Button>
-          <Button type="button" onClick={makeClient}>Make client</Button>
+          <Button type="button" onClick={() => openConvertDialog("client")}>Make client</Button>
         </div>
       </div>
+
+      <Dialog open={makeClientOpen} onOpenChange={setMakeClientOpen}>
+        <DialogContent className="bg-card max-w-3xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>
+              {convertMode === "contact"
+                ? (lead?.name ? `+ Contact: ${lead.name}` : "+ Contact")
+                : (lead?.name ? `Make client: ${lead.name}` : "Make client")}
+            </DialogTitle>
+          </DialogHeader>
+
+          <Tabs value={makeClientStep} onValueChange={(v) => setMakeClientStep(v as any)}>
+            <TabsList className="bg-muted/40">
+              <TabsTrigger value="details" disabled={convertMode === "contact"}>Client details</TabsTrigger>
+              <TabsTrigger value="contact">Client contacts</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="details" className="mt-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                  <Label className="sm:col-span-2 text-muted-foreground">Type</Label>
+                  <div className="sm:col-span-10">
+                    <RadioGroup
+                      value={makeClientForm.type}
+                      onValueChange={(v) => setMakeClientForm((p) => ({ ...p, type: v as any }))}
+                      className="flex items-center gap-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Organization" id="client-type-org" />
+                        <Label htmlFor="client-type-org">Organization</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Person" id="client-type-person" />
+                        <Label htmlFor="client-type-person">Person</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Name</Label>
+                  <Input value={makeClientForm.name} onChange={(e) => setMakeClientForm((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Owner</Label>
+                  <Input value={makeClientForm.owner} onChange={(e) => setMakeClientForm((p) => ({ ...p, owner: e.target.value }))} placeholder="Owner" />
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Address</Label>
+                  <Textarea value={makeClientForm.address} onChange={(e) => setMakeClientForm((p) => ({ ...p, address: e.target.value }))} />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>City</Label><Input value={makeClientForm.city} onChange={(e) => setMakeClientForm((p) => ({ ...p, city: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>State</Label><Input value={makeClientForm.state} onChange={(e) => setMakeClientForm((p) => ({ ...p, state: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Zip</Label><Input value={makeClientForm.zip} onChange={(e) => setMakeClientForm((p) => ({ ...p, zip: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Country</Label><Input value={makeClientForm.country} onChange={(e) => setMakeClientForm((p) => ({ ...p, country: e.target.value }))} /></div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Phone</Label><Input value={makeClientForm.phone} onChange={(e) => setMakeClientForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Website</Label><Input value={makeClientForm.website} onChange={(e) => setMakeClientForm((p) => ({ ...p, website: e.target.value }))} /></div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>VAT Number</Label><Input value={makeClientForm.vatNumber} onChange={(e) => setMakeClientForm((p) => ({ ...p, vatNumber: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>GST Number</Label><Input value={makeClientForm.gstNumber} onChange={(e) => setMakeClientForm((p) => ({ ...p, gstNumber: e.target.value }))} /></div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Client groups</Label><Input placeholder="Comma separated" value={makeClientForm.clientGroups} onChange={(e) => setMakeClientForm((p) => ({ ...p, clientGroups: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Labels</Label><Input placeholder="Comma separated" value={makeClientForm.labels} onChange={(e) => setMakeClientForm((p) => ({ ...p, labels: e.target.value }))} /></div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Currency</Label><Input value={makeClientForm.currency} onChange={(e) => setMakeClientForm((p) => ({ ...p, currency: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Currency Symbol</Label><Input value={makeClientForm.currencySymbol} onChange={(e) => setMakeClientForm((p) => ({ ...p, currencySymbol: e.target.value }))} /></div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    id="disable-online-payment"
+                    type="checkbox"
+                    checked={makeClientForm.disableOnlinePayment}
+                    onChange={(e) => setMakeClientForm((p) => ({ ...p, disableOnlinePayment: e.target.checked }))}
+                  />
+                  <Label htmlFor="disable-online-payment">Disable online payment</Label>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="contact" className="mt-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>First name</Label><Input value={makeClientForm.firstName} onChange={(e) => setMakeClientForm((p) => ({ ...p, firstName: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Last name</Label><Input value={makeClientForm.lastName} onChange={(e) => setMakeClientForm((p) => ({ ...p, lastName: e.target.value }))} /></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Email</Label><Input type="email" value={makeClientForm.email} onChange={(e) => setMakeClientForm((p) => ({ ...p, email: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Phone</Label><Input value={makeClientForm.contactPhone} onChange={(e) => setMakeClientForm((p) => ({ ...p, contactPhone: e.target.value }))} /></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Skype</Label><Input value={makeClientForm.skype} onChange={(e) => setMakeClientForm((p) => ({ ...p, skype: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Job Title</Label><Input value={makeClientForm.jobTitle} onChange={(e) => setMakeClientForm((p) => ({ ...p, jobTitle: e.target.value }))} /></div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <RadioGroup
+                    value={makeClientForm.gender}
+                    onValueChange={(v) => setMakeClientForm((p) => ({ ...p, gender: v as any }))}
+                    className="flex items-center gap-6"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="male" id="gender-male" />
+                      <Label htmlFor="gender-male">Male</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="female" id="gender-female" />
+                      <Label htmlFor="gender-female">Female</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="other" id="gender-other" />
+                      <Label htmlFor="gender-other">Other</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>Password</Label><Input type="password" value={makeClientForm.password} onChange={(e) => setMakeClientForm((p) => ({ ...p, password: e.target.value }))} placeholder="Password" /></div>
+                  <div className="flex items-center gap-2 mt-6">
+                    <input
+                      id="primary-contact"
+                      type="checkbox"
+                      checked={makeClientForm.primaryContact}
+                      onChange={(e) => setMakeClientForm((p) => ({ ...p, primaryContact: e.target.checked }))}
+                    />
+                    <Label htmlFor="primary-contact">Primary contact</Label>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setMakeClientOpen(false)}>Close</Button>
+            {makeClientStep === "contact" ? (
+              <Button type="button" variant="outline" onClick={() => setMakeClientStep("details")}>Previous</Button>
+            ) : null}
+            {makeClientStep === "details" ? (
+              <Button type="button" onClick={() => setMakeClientStep("contact")}>Next</Button>
+            ) : (
+              <Button type="button" onClick={saveMakeClient}>Save</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={openReminders} onOpenChange={setOpenReminders}>
         <SheetContent side="right" className="p-0 sm:max-w-[420px]">
@@ -1483,7 +1974,13 @@ export default function LeadDetails() {
                     <TableRow key={c._id}>
                       <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="text-primary underline cursor-pointer">{c.name}</span>
+                          <button
+                            type="button"
+                            className="text-primary underline cursor-pointer"
+                            onClick={() => navigate(`/crm/contacts/${c._id}`)}
+                          >
+                            {c.name}
+                          </button>
                           {c.isPrimaryContact ? <Badge variant="secondary">Primary contact</Badge> : null}
                         </div>
                       </TableCell>
@@ -1701,7 +2198,191 @@ export default function LeadDetails() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tasks" className="mt-4"><TasksOverview /></TabsContent>
+        <TabsContent value="tasks" className="mt-4">
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Tasks</div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={loadTasks}><RefreshCw className="w-4 h-4" /></Button>
+                  <Button type="button" onClick={() => { resetTaskForm(); setOpenAddTask(true); }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add task
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <Input className="w-64" placeholder="Search" value={tasksQuery} onChange={(e) => setTasksQuery(e.target.value)} />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-24">ID</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Start date</TableHead>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead>Assigned to</TableHead>
+                    <TableHead>Collaborators</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tasks.length ? (
+                    tasks.map((t) => (
+                      <TableRow key={t._id} className="hover:bg-muted/30">
+                        <TableCell className="text-xs text-muted-foreground">{String(t._id || "").slice(-6)}</TableCell>
+                        <TableCell>
+                          <button type="button" className="text-primary underline" onClick={() => navigate(`/tasks/${t._id}`)}>
+                            {t.title || "-"}
+                          </button>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{formatYmd(t.start)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatYmd(t.deadline)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{t.assignees?.[0]?.name || "-"}</TableCell>
+                        <TableCell className="max-w-[220px] truncate">{(t.collaborators || []).join(", ") || "-"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{statusLabel(t.status)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => navigate(`/tasks/${t._id}`)}>
+                            <ExternalLinkIcon className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Dialog open={openAddTask} onOpenChange={setOpenAddTask}>
+            <DialogContent className="bg-card max-w-3xl" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Add task</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Title</div>
+                  <Input className="sm:col-span-4" placeholder="Title" value={taskForm.title} onChange={(e)=>setTaskForm((p)=>({ ...p, title: e.target.value }))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-start">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Description</div>
+                  <Textarea className="sm:col-span-4" placeholder="Description" value={taskForm.description} onChange={(e)=>setTaskForm((p)=>({ ...p, description: e.target.value }))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Points</div>
+                  <Select value={taskForm.points} onValueChange={(v)=>setTaskForm((p)=>({ ...p, points: v }))}>
+                    <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="1 Point"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Point</SelectItem>
+                      <SelectItem value="2">2 Points</SelectItem>
+                      <SelectItem value="3">3 Points</SelectItem>
+                      <SelectItem value="4">4 Points</SelectItem>
+                      <SelectItem value="5">5 Points</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Assign to</div>
+                  <Select value={taskForm.assignTo || "__none__"} onValueChange={(v)=>setTaskForm((p)=>({ ...p, assignTo: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="Mindspire tech"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">-</SelectItem>
+                      {employeeNames.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Collaborators</div>
+                  <div className="sm:col-span-4">
+                    <Input
+                      list="lead-task-collaborators"
+                      placeholder="Collaborators (comma separated)"
+                      value={taskForm.collaborators}
+                      onChange={(e)=>setTaskForm((p)=>({ ...p, collaborators: e.target.value }))}
+                    />
+                    <datalist id="lead-task-collaborators">
+                      {employeeNames.map((n) => (
+                        <option key={n} value={n} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Status</div>
+                  <Select value={taskForm.status} onValueChange={(v)=>setTaskForm((p)=>({ ...p, status: v }))}>
+                    <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="To do"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">To do</SelectItem>
+                      <SelectItem value="in-progress">In progress</SelectItem>
+                      <SelectItem value="done">Done</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Priority</div>
+                  <Select value={taskForm.priority} onValueChange={(v)=>setTaskForm((p)=>({ ...p, priority: v }))}>
+                    <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="Priority"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Minor</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Labels</div>
+                  <Input className="sm:col-span-4" placeholder="Labels" value={taskForm.labels} onChange={(e)=>setTaskForm((p)=>({ ...p, labels: e.target.value }))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Start date</div>
+                  <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={taskForm.start} onChange={(e)=>setTaskForm((p)=>({ ...p, start: e.target.value }))} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-1">Deadline</div>
+                  <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={taskForm.deadline} onChange={(e)=>setTaskForm((p)=>({ ...p, deadline: e.target.value }))} />
+                </div>
+              </div>
+
+              <DialogFooter className="items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={taskFilesRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => setTaskSelectedFiles(Array.from(e.target.files || []))}
+                  />
+                  <Button type="button" variant="outline" onClick={() => taskFilesRef.current?.click()} disabled={taskUploading}>
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    Upload File
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => toast.success("Voice note coming soon")}>
+                    <Mic className="w-4 h-4" />
+                  </Button>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {taskSelectedFiles.length ? `${taskSelectedFiles.length} file(s) selected` : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" onClick={() => setOpenAddTask(false)}>Close</Button>
+                  <Button type="button" variant="secondary" onClick={() => saveTask("save_show")} disabled={taskUploading}>Save & show</Button>
+                  <Button type="button" onClick={() => saveTask("save")} disabled={taskUploading}>Save</Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
         <TabsContent value="estimates" className="mt-4">
           <Card>
             <CardHeader className="p-4 pb-2">
@@ -2144,8 +2825,8 @@ export default function LeadDetails() {
             </DialogContent>
           </Dialog>
         </TabsContent>
-        <TabsContent value="notes" className="mt-4"><Notes /></TabsContent>
-        <TabsContent value="files" className="mt-4"><Files /></TabsContent>
+        <TabsContent value="notes" className="mt-4"><Notes leadId={id} /></TabsContent>
+        <TabsContent value="files" className="mt-4"><Files leadId={id} /></TabsContent>
         <TabsContent value="events" className="mt-4"><Events /></TabsContent>
       </Tabs>
     </div>

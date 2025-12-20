@@ -22,7 +22,6 @@ export default function InvoicePreview() {
   const navigate = useNavigate();
   const location = useLocation();
   const [inv, setInv] = useState<any | null>(null);
-  const [loadError, setLoadError] = useState<string>("");
   const pdfTargetRef = useRef<HTMLDivElement | null>(null);
   const autoCloseRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -42,21 +41,15 @@ export default function InvoicePreview() {
     if (!id) return;
     (async () => {
       try {
-        setLoadError("");
         const r = await fetch(`${API_BASE}/api/invoices/${id}`);
-        if (!r.ok) {
-          setLoadError("Failed to load invoice");
-          return;
-        }
+        if (!r.ok) return;
         const invRow = await r.json();
         setInv(invRow);
 
         const invId = String(invRow?._id || "");
         const p = await fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(invId)}`);
         if (p.ok) setPayments(await p.json());
-      } catch {
-        setLoadError("Backend not reachable");
-      }
+      } catch {}
     })();
   }, [id]);
 
@@ -245,22 +238,6 @@ export default function InvoicePreview() {
     if (typeof raw === "string") return raw.split(",").map((s) => s.trim()).filter(Boolean);
     return [String(raw)].map((s) => s.trim()).filter(Boolean);
   }, [inv?.labels]);
-
-  if (!inv) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-        <div className="bg-white border rounded-lg shadow-sm p-6 max-w-md w-full text-center space-y-3">
-          <div className="text-lg font-semibold">Loading invoice…</div>
-          {loadError ? (
-            <div className="text-sm text-red-600">{loadError} (API: {API_BASE})</div>
-          ) : (
-            <div className="text-sm text-gray-600">Please wait.</div>
-          )}
-          <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={`invoice-preview p-4 bg-gray-100 min-h-screen ${viewMode.isPdf ? "pdf-mode" : ""}`}>

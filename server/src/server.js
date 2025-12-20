@@ -14,6 +14,8 @@ import payrollRouter from "./routes/payroll.js";
 import departmentsRouter from "./routes/departments.js";
 import filesRouter from "./routes/files.js";
 import notesRouter from "./routes/notes.js";
+import noteCategoriesRouter from "./routes/noteCategories.js";
+import noteLabelsRouter from "./routes/noteLabels.js";
 import projectsRouter from "./routes/projects.js";
 import expensesRouter from "./routes/expenses.js";
 import jobsRouter from "./routes/jobs.js";
@@ -28,6 +30,7 @@ import ordersRouter from "./routes/orders.js";
 import contractsRouter from "./routes/contracts.js";
 import proposalsRouter from "./routes/proposals.js";
 import ticketsRouter from "./routes/tickets.js";
+import ticketLabelsRouter from "./routes/ticketLabels.js";
 import eventsApiRouter from "./routes/events.js";
 import itemsRouter from "./routes/items.js";
 import estimateRequestsRouter from "./routes/estimateRequests.js";
@@ -36,6 +39,7 @@ import authRouter from "./routes/auth.js";
 import estimateFormsRouter from "./routes/estimateForms.js";
 import leadsRouter from "./routes/leads.js";
 import leadLabelsRouter from "./routes/leadLabels.js";
+import taskLabelsRouter from "./routes/taskLabels.js";
 import remindersRouter from "./routes/reminders.js";
 import bcrypt from "bcryptjs";
 import User from "./models/User.js";
@@ -68,6 +72,22 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, env: process.env.NODE_ENV || "development" });
 });
 
+app.get("/api/debug/routes", (_req, res) => {
+  try {
+    const stack = app?._router?.stack || [];
+    const mounts = stack
+      .filter((l) => l && l.name === "router" && l.regexp)
+      .map((l) => {
+        const s = l.regexp.toString();
+        const m = s.match(/\\\/\^\\\\\/(.*?)\\\\\//);
+        return m?.[1] ? `/${m[1].replace(/\\\\\//g, "/")}` : s;
+      });
+    res.json({ mounts });
+  } catch (e) {
+    res.status(500).json({ error: e.message || "debug failed" });
+  }
+});
+
 app.use("/api/contacts", contactsRouter);
 app.use("/api/companies", companiesRouter);
 app.use("/api/employees", employeesRouter);
@@ -77,6 +97,8 @@ app.use("/api/payroll", payrollRouter);
 app.use("/api/departments", departmentsRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/notes", notesRouter);
+app.use("/api/note-categories", noteCategoriesRouter);
+app.use("/api/note-labels", noteLabelsRouter);
 app.use("/api/projects", projectsRouter);
 app.use("/api/expenses", expensesRouter);
 app.use("/api/jobs", jobsRouter);
@@ -93,6 +115,8 @@ app.use("/api/contracts", contractsRouter);
 app.use("/api/proposals", proposalsRouter);
 app.use("/api/leads", leadsRouter);
 app.use("/api/lead-labels", leadLabelsRouter);
+app.use("/api/task-labels", taskLabelsRouter);
+app.use("/api/ticket-labels", ticketLabelsRouter);
 app.use("/api/reminders", remindersRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/events", eventsApiRouter);

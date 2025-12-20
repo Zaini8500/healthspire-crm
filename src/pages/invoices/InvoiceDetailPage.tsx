@@ -384,15 +384,10 @@ export default function InvoiceDetailPage() {
       const sp = new URLSearchParams();
       sp.set("share", "1");
       sp.set("channel", channel);
-      const url = `${window.location.origin}/invoices/${id}/preview?${sp.toString()}`;
+      const url = `/invoices/${id}/preview?${sp.toString()}`;
       // Must open synchronously to avoid popup blockers.
       const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (w) {
-        try { w.focus(); } catch {}
-      } else {
-        // Popup blocked: fall back to same-tab navigation.
-        window.location.href = url;
-      }
+      if (w) w.focus();
     } catch {}
   };
 

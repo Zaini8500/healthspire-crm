@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Upload, Tags, Search, HelpCircle, Edit } from "lucide-react";
+import { Plus, Upload, Tags, Search, HelpCircle, Edit, Trash2 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -350,6 +350,7 @@ export default function Clients() {
           <ClientsMainTable
             clients={clientsData}
             onClientUpdated={(u:any)=> setClientsData((prev)=> prev.map((c:any)=> String(c._id)===String(u._id) ? u : c))}
+            onClientDeleted={(id: string) => setClientsData((prev) => prev.filter((c: any) => String(c._id) !== String(id)))}
           />
         </TabsContent>
 
@@ -519,9 +520,10 @@ function ContactsTable({ rows }: { rows: ContactRow[] }) {
   );
 }
 
-function ClientsMainTable({ clients, onClientUpdated }: { clients: any[]; onClientUpdated?: (updated:any)=>void }) {
+function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clients: any[]; onClientUpdated?: (updated:any)=>void; onClientDeleted?: (id: string)=>void }) {
   const [editing, setEditing] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // full editable state
   const [typeVal, setTypeVal] = useState<"org"|"person">("org");
   const [company, setCompany] = useState("");
@@ -600,6 +602,24 @@ function ClientsMainTable({ clients, onClientUpdated }: { clients: any[]; onClie
     } catch {}
     finally { setSaving(false); }
   };
+
+  const deleteClient = async (clientId: string) => {
+    const ok = window.confirm("Delete this client? This cannot be undone.");
+    if (!ok) return;
+    try {
+      setDeletingId(clientId);
+      const res = await fetch(`${API_BASE}/api/clients/${clientId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to delete client");
+      toast.success("Client deleted");
+      onClientDeleted?.(clientId);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete client");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <Card className="p-0 overflow-hidden rounded-xl border">
       <Table>
@@ -649,9 +669,19 @@ function ClientsMainTable({ clients, onClientUpdated }: { clients: any[]; onClie
               <TableCell className="whitespace-nowrap">{c.paymentReceived ? `Rs.${c.paymentReceived}` : "Rs.0"}</TableCell>
               <TableCell className="whitespace-nowrap">{c.due ? `Rs.${c.due}` : "Rs.0"}</TableCell>
               <TableCell className="text-right">
-                <Button variant="link" className="px-0 text-primary inline-flex items-center gap-1" onClick={()=>openEdit(c)}>
-                  <Edit className="w-4 h-4"/> Edit
-                </Button>
+                <div className="inline-flex items-center gap-3">
+                  <Button variant="link" className="px-0 text-primary inline-flex items-center gap-1" onClick={()=>openEdit(c)}>
+                    <Edit className="w-4 h-4"/> Edit
+                  </Button>
+                  <Button
+                    variant="link"
+                    className="px-0 text-destructive inline-flex items-center gap-1"
+                    onClick={() => deleteClient(String(c._id))}
+                    disabled={deletingId === String(c._id)}
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
