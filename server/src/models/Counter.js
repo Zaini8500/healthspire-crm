@@ -8,4 +8,6 @@ const CounterSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
-export default mongoose.model("Counter", CounterSchema);
+// Reuse existing model if it was already compiled (fixes OverwriteModelError in dev reloads)
+const Counter = mongoose.models.Counter || mongoose.model("Counter", CounterSchema);
+export default Counter;

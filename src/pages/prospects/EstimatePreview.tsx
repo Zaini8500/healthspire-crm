@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import html2pdf from "html2pdf.js";
 
 const API_BASE = "http://localhost:5000";
+
+// Dynamically load html2pdf when needed to avoid bundler install requirement
+const loadHtml2Pdf = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const w = window as any;
+    if (w.html2pdf) return resolve(w.html2pdf);
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js";
+    script.async = true;
+    script.onload = () => resolve((window as any).html2pdf);
+    script.onerror = () => reject(new Error("Failed to load html2pdf"));
+    document.head.appendChild(script);
+  });
+};
 
 const DEFAULT_PAYMENT_INFO = `A/c Title: Health Spire Pvt LTd
 Bank No: 3130301000008524
@@ -139,6 +152,7 @@ export default function EstimatePreview() {
 
     const t = window.setTimeout(async () => {
       try {
+        const html2pdf = await loadHtml2Pdf();
         const filename = `estimate-${est?.number || id || ""}.pdf`;
         await html2pdf()
           .set({
@@ -170,6 +184,7 @@ export default function EstimatePreview() {
     setIsSharing(true);
     const t = window.setTimeout(async () => {
       try {
+        const html2pdf = await loadHtml2Pdf();
         const filename = `estimate-${est?.number || id || ""}.pdf`;
         const worker: any = html2pdf()
           .set({
