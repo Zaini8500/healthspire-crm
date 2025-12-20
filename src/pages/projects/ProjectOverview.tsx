@@ -26,6 +26,7 @@ interface Project {
   deadline?: string; // ISO
   status?: string;
   description?: string;
+  members?: string[];
 }
 
 interface TaskRow {
@@ -149,6 +150,12 @@ interface FeedbackItem {
 
 export default function ProjectOverviewPage() {
   const { id } = useParams();
+  // Persist the current project id for cross-page context (Proposal Editor uses this)
+  useEffect(() => {
+    if (id) {
+      try { localStorage.setItem("current_project_id", String(id)); } catch {}
+    }
+  }, [id]);
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [activity, setActivity] = useState<Array<{ id: string; text: string; at: string }>>([]);
@@ -191,6 +198,13 @@ export default function ProjectOverviewPage() {
   const [newCommentKind, setNewCommentKind] = useState("General");
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddComment, setShowAddComment] = useState(false);
+
+  // Project overview inline editors
+  const [editDescOpen, setEditDescOpen] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [membersDraft, setMembersDraft] = useState<string[]>([]);
+  const [newMember, setNewMember] = useState("");
 
   type ItemKind = "task" | "milestone" | "note" | "comment" | "file" | "feedback" | "timesheet" | "invoice" | "payment" | "expense" | "contract";
   const [editOpen, setEditOpen] = useState(false);
@@ -315,6 +329,7 @@ export default function ProjectOverviewPage() {
             deadline: d.deadline ? new Date(d.deadline).toISOString() : undefined,
             status: d.status || "Open",
             description: d.description || "",
+            members: Array.isArray(d.members) ? d.members.map((x:any)=> String(x)).filter(Boolean) : [],
           });
         }
       } catch {}
@@ -352,6 +367,17 @@ export default function ProjectOverviewPage() {
     const local = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
     setEditDeadline(local);
   }, [project?.deadline]);
+
+  useEffect(() => {
+    if (editDescOpen) setDescDraft(project?.description || "");
+  }, [editDescOpen, project?.description]);
+
+  useEffect(() => {
+    if (membersOpen) {
+      setMembersDraft(Array.isArray(project?.members) ? project!.members! : []);
+      setNewMember("");
+    }
+  }, [membersOpen, project?.members]);
 
   useEffect(() => {
     const t = window.setInterval(() => setCountdownNow(Date.now()), 1000);
@@ -651,6 +677,35 @@ export default function ProjectOverviewPage() {
 
   const printTasksTable = () => {
     window.print();
+  };
+
+  const saveDescription = async () => {
+    if (!id) return;
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: descDraft || "" }),
+      });
+      if (r.ok) toast.success("Description updated");
+    } catch {}
+    setProject((prev) => (prev ? { ...prev, description: descDraft || "" } : prev));
+    setEditDescOpen(false);
+  };
+
+  const saveMembers = async () => {
+    if (!id) return;
+    const list = membersDraft.map((x) => String(x).trim()).filter(Boolean);
+    try {
+      const r = await fetch(`${API_BASE}/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ members: list }),
+      });
+      if (r.ok) toast.success("Members updated");
+    } catch {}
+    setProject((prev) => (prev ? { ...prev, members: list } : prev));
+    setMembersOpen(false);
   };
 
   const addMilestone = async () => {
@@ -1911,12 +1966,26 @@ export default function ProjectOverviewPage() {
             </Card>
 
             <Card className="p-4 space-y-3 lg:col-span-2">
-              <div className="text-sm font-medium text-sky-600">Project members</div>
-              <div className="text-sm text-muted-foreground">No members</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-sky-600">Project members</div>
+                <Button size="sm" variant="outline" onClick={() => setMembersOpen(true)}>Manage</Button>
+              </div>
+              {project?.members && project.members.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {project.members.map((m, idx) => (
+                    <Badge key={`${m}-${idx}`} variant="secondary">{m}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No members</div>
+              )}
             </Card>
 
             <Card className="p-4 space-y-2 lg:col-span-2">
-              <div className="text-sm font-medium text-sky-600">Description</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-sky-600">Description</div>
+                <Button size="sm" variant="outline" onClick={() => setEditDescOpen(true)}>Edit</Button>
+              </div>
               <div className="text-sm whitespace-pre-wrap">{project?.description || "No description"}</div>
             </Card>
 
@@ -4165,6 +4234,53 @@ export default function ProjectOverviewPage() {
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDescOpen} onOpenChange={setEditDescOpen}>
+        <DialogContent className="bg-card sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit description</DialogTitle>
+          </DialogHeader>
+          <Textarea value={descDraft} onChange={(e)=>setDescDraft(e.target.value)} className="min-h-[160px]" />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={saveDescription}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={membersOpen} onOpenChange={setMembersOpen}>
+        <DialogContent className="bg-card sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage members</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input placeholder="Member name or email" value={newMember} onChange={(e)=>setNewMember(e.target.value)} />
+              <Button variant="outline" onClick={()=>{ const v = newMember.trim(); if (!v) return; setMembersDraft(prev=> [v, ...prev]); setNewMember(""); }}>Add</Button>
+            </div>
+            <div className="space-y-2">
+              {membersDraft.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No members yet.</div>
+              ) : (
+                membersDraft.map((m, idx) => (
+                  <div key={`${m}-${idx}`} className="flex items-center gap-2">
+                    <Input value={m} onChange={(e)=> setMembersDraft(prev => prev.map((x,i)=> i===idx ? e.target.value : x))} />
+                    <Button variant="outline" onClick={()=> setMembersDraft(prev => prev.filter((_,i)=> i!==idx))}>Remove</Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Close</Button>
+            </DialogClose>
+            <Button onClick={saveMembers}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

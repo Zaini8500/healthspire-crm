@@ -37,6 +37,7 @@ import EstimateDetail from "./pages/prospects/EstimateDetail";
 import EstimateRequests from "./pages/prospects/EstimateRequests";
 import EstimateForms from "./pages/prospects/EstimateForms";
 import Proposals from "./pages/prospects/Proposals";
+import ProposalDetail from "./pages/prospects/ProposalDetail";
 import ManageUsers from "./pages/user-management/ManageUsers";
 import RolesPermissions from "./pages/user-management/RolesPermissions";
 import DeleteRequest from "./pages/user-management/DeleteRequest";
@@ -169,6 +170,7 @@ const App = () => (
             <Route path="/prospects/estimate-requests" element={<EstimateRequests />} />
             <Route path="/prospects/estimate-forms" element={<EstimateForms />} />
             <Route path="/prospects/proposals" element={<Proposals />} />
+            <Route path="/prospects/proposals/:id" element={<ProposalDetail />} />
             {/* User Management */}
             <Route path="/user-management/users" element={<ManageUsers />} />
             <Route path="/user-management/roles" element={<RolesPermissions />} />

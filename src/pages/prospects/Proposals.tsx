@@ -7,13 +7,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { Search, Plus, RefreshCw, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Search, Plus, RefreshCw, ChevronLeft, ChevronRight, Trash2, MoreVertical, Pencil, Eye } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useNavigate } from "react-router-dom";
 
 const API_BASE = "http://localhost:5000";
 
 type Row = {
   id: string;
   title: string;
+  number?: number;
   client: string;
   proposalDate: string;
   validUntil: string;
@@ -34,14 +37,18 @@ export default function Proposals() {
   const [openAdd, setOpenAdd] = useState(false);
 
   const [rows, setRows] = useState<Row[]>([]);
+  const navigate = useNavigate();
 
   const [proposalDate, setProposalDate] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [client, setClient] = useState("");
   const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
   const [tax1, setTax1] = useState("0");
   const [tax2, setTax2] = useState("0");
   const [note, setNote] = useState("");
+  const [statusEdit, setStatusEdit] = useState("draft");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -53,6 +60,7 @@ export default function Proposals() {
       const mapped: Row[] = (Array.isArray(data) ? data : []).map((d: any) => ({
         id: String(d._id || ""),
         title: d.title || "-",
+        number: typeof d.number === "number" ? d.number : undefined,
         client: d.client || "-",
         proposalDate: d.proposalDate ? new Date(d.proposalDate).toISOString().slice(0, 10) : "-",
         validUntil: d.validUntil ? new Date(d.validUntil).toISOString().slice(0, 10) : "-",
@@ -82,17 +90,71 @@ export default function Proposals() {
     if (status && status !== "-") {
       out = out.filter((r) => String(r.status || "").toLowerCase() === String(status).toLowerCase());
     }
-    return out;
+    const pick = new Map<string, Row>();
+    for (const r of out) {
+      const key = `${(r.client || "").trim().toLowerCase()}|${(r.title || "").trim().toLowerCase()}`;
+      const ex = pick.get(key);
+      if (!ex) { pick.set(key, r); continue; }
+      const a = r.proposalDate && r.proposalDate !== "-" ? Date.parse(r.proposalDate) : 0;
+      const b = ex.proposalDate && ex.proposalDate !== "-" ? Date.parse(ex.proposalDate) : 0;
+      if (a >= b) pick.set(key, r);
+    }
+    return Array.from(pick.values());
   }, [rows, status]);
+
+  const openEdit = (r: Row) => {
+    setEditingId(r.id);
+    setProposalDate(r.proposalDate && r.proposalDate !== "-" ? r.proposalDate : "");
+    setValidUntil(r.validUntil && r.validUntil !== "-" ? r.validUntil : "");
+    setClient(r.client || "");
+    setTitle(r.title || "");
+    setAmount(r.amount ? String(r.amount) : "");
+    setTax1("0");
+    setTax2("0");
+    setNote(r.note || "");
+    setStatusEdit(r.status || "draft");
+    setOpenAdd(true);
+  };
+
+  const updateStatus = async (id: string, newStatus: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/proposals/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }) });
+      if (res.ok) {
+        setRows((p) => p.map((x) => (x.id === id ? { ...x, status: newStatus } : x)));
+        toast.success("Status updated");
+      }
+    } catch {}
+  };
+
+  const exportCSV = () => {
+    const header = ["Number","Title","Client","Proposal date","Valid until","Amount","Status"];
+    const lines = filteredRows.map((r, i) => [i + 1, r.title, r.client, r.proposalDate, r.validUntil, r.amount, r.status]);
+    const csv = [header, ...lines].map(row => row.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'proposals.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printTable = () => {
+    const w = window.open('', '_blank'); if (!w) return;
+    const rowsHtml = filteredRows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.title}</td><td>${r.client}</td><td>${r.proposalDate}</td><td>${r.validUntil}</td><td>${r.amount}</td><td>${r.status}</td></tr>`).join('');
+    w.document.write(`<!doctype html><html><head><title>Proposals</title></head><body><h3>Proposals</h3><table border=\"1\" cellspacing=\"0\" cellpadding=\"6\"><thead><tr><th>Number</th><th>Title</th><th>Client</th><th>Proposal date</th><th>Valid until</th><th>Amount</th><th>Status</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`);
+    w.document.close(); w.focus(); w.print(); w.close();
+  };
 
   const openNew = () => {
     setProposalDate("");
     setValidUntil("");
     setClient("");
     setTitle("");
+    setAmount("");
     setTax1("0");
     setTax2("0");
     setNote("");
+    setStatusEdit("draft");
+    setEditingId(null);
     setOpenAdd(true);
   };
 
@@ -103,22 +165,29 @@ export default function Proposals() {
         title: title || "",
         proposalDate: proposalDate ? new Date(proposalDate).toISOString() : undefined,
         validUntil: validUntil ? new Date(validUntil).toISOString() : undefined,
+        amount: amount ? Number(amount) : 0,
         tax1: Number(tax1 || 0),
         tax2: Number(tax2 || 0),
         note: note || "",
+        status: statusEdit || "draft",
       };
-      const res = await fetch(`${API_BASE}/api/proposals`, {
-        method: "POST",
+      const url = editingId ? `${API_BASE}/api/proposals/${editingId}` : `${API_BASE}/api/proposals`;
+      const method = editingId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(d?.error || "Failed to add proposal");
-      toast.success("Proposal created");
+      if (!res.ok) throw new Error(d?.error || (editingId ? "Failed to update proposal" : "Failed to add proposal"));
+      toast.success(editingId ? "Proposal updated" : "Proposal created");
       setOpenAdd(false);
+      // Reset filters so the new/updated item is visible even if current filters would hide it
+      setStatus("-");
+      setQuery("");
       await load();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to add proposal");
+      toast.error(e?.message || (editingId ? "Failed to update proposal" : "Failed to add proposal"));
     }
   };
 
@@ -139,8 +208,8 @@ export default function Proposals() {
       <div className="flex items-center justify-between">
         <h1 className="text-sm text-muted-foreground">Proposals</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">Excel</Button>
-          <Button variant="outline" size="sm">Print</Button>
+          <Button variant="outline" size="sm" onClick={exportCSV}>Excel</Button>
+          <Button variant="outline" size="sm" onClick={printTable}>Print</Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search" value={query} onChange={(e)=>setQuery(e.target.value)} className="pl-9 w-56" />
@@ -162,11 +231,27 @@ export default function Proposals() {
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Title</div>
                 <div className="sm:col-span-9"><Input placeholder="Title" value={title} onChange={(e)=>setTitle(e.target.value)} /></div>
 
+                <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Amount</div>
+                <div className="sm:col-span-9"><Input type="number" placeholder="Amount" value={amount} onChange={(e)=>setAmount(e.target.value)} /></div>
+
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">TAX</div>
                 <div className="sm:col-span-9"><Input type="number" value={tax1} onChange={(e)=>setTax1(e.target.value)} /></div>
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Second TAX</div>
                 <div className="sm:col-span-9"><Input type="number" value={tax2} onChange={(e)=>setTax2(e.target.value)} /></div>
+
+                <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Status</div>
+                <div className="sm:col-span-9">
+                  <Select value={statusEdit} onValueChange={setStatusEdit}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="sent">Sent</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
+                      <SelectItem value="declined">Declined</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Note</div>
                 <div className="sm:col-span-9"><Textarea placeholder="Note" className="min-h-[96px]" value={note} onChange={(e)=>setNote(e.target.value)} /></div>
@@ -174,7 +259,7 @@ export default function Proposals() {
               <DialogFooter>
                 <div className="w-full flex items-center justify-end gap-2">
                   <Button variant="outline" onClick={()=>setOpenAdd(false)}>Close</Button>
-                  <Button onClick={save}>Save</Button>
+                  <Button onClick={save}>{editingId ? 'Update' : 'Save'}</Button>
                 </div>
               </DialogFooter>
             </DialogContent>
@@ -216,7 +301,7 @@ export default function Proposals() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
-                <TableHead>Proposal</TableHead>
+                <TableHead>Number</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Proposal date</TableHead>
                 <TableHead>Valid until</TableHead>
@@ -227,18 +312,38 @@ export default function Proposals() {
             </TableHeader>
             <TableBody>
               {filteredRows.length ? (
-                filteredRows.map((r) => (
+                filteredRows.map((r, i) => (
                   <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">{shortId(r.id)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{r.client}</TableCell>
+                    <TableCell className="whitespace-nowrap cursor-pointer text-primary" onClick={() => navigate(`/prospects/proposals/${r.id}`)}>{i + 1}</TableCell>
+                    <TableCell className="whitespace-nowrap cursor-pointer text-primary" onClick={() => navigate(`/prospects/proposals/${r.id}`)}>{r.client}</TableCell>
                     <TableCell className="whitespace-nowrap">{r.proposalDate}</TableCell>
                     <TableCell className="whitespace-nowrap">{r.validUntil}</TableCell>
                     <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
-                    <TableCell className="whitespace-nowrap">{r.status}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Select value={r.status} onValueChange={(v)=>updateStatus(r.id, v)}>
+                        <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="accepted">Accepted</SelectItem>
+                          <SelectItem value="declined">Declined</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell className="text-right">
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => deleteRow(r.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/prospects/proposals/${r.id}`)}><Eye className="w-4 h-4 mr-2"/>View</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEdit(r)}><Pencil className="w-4 h-4 mr-2"/>Edit</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => deleteRow(r.id)} className="text-destructive"><Trash2 className="w-4 h-4 mr-2"/>Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))

@@ -10,7 +10,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Calendar, Filter, Plus, Search, Upload, Tags, Paperclip } from "lucide-react";
+import { Calendar, Filter, Plus, Search, Upload, Tags, Paperclip, MoreVertical, Eye, Pencil, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 import { useNavigate } from "react-router-dom";
@@ -28,6 +28,7 @@ interface Row {
   progress: number; // 0-100
   status: "Open" | "Completed" | "Hold";
   labels?: string;
+  description?: string;
 }
 
 
@@ -58,6 +59,11 @@ export default function Overview() {
   const [newLabel, setNewLabel] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Progress editor dialog state
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressProjectId, setProgressProjectId] = useState<string | null>(null);
+  const [progressValue, setProgressValue] = useState<number>(0);
+
   useEffect(() => {
     (async () => {
       try {
@@ -73,9 +79,10 @@ export default function Overview() {
             price: d.price != null ? String(d.price) : "-",
             start: d.start ? new Date(d.start).toISOString().slice(0,10) : "-",
             due: d.deadline ? new Date(d.deadline).toISOString().slice(0,10) : "-",
-            progress: d.status === "Completed" ? 100 : 0,
+            progress: (()=>{ const p = typeof d.progress === 'number' ? Number(d.progress) : (d.status === "Completed" ? 100 : 0); return Math.max(0, Math.min(100, isNaN(p) ? 0 : p)); })(),
             status: (d.status as any) || "Open",
             labels: typeof d.labels === "string" ? d.labels : Array.isArray(d.labels) ? d.labels.join(", ") : "",
+            description: d.description || "",
           }));
           setRows(mapped);
         }
@@ -148,11 +155,40 @@ export default function Overview() {
           progress: (d.status as any) === "Completed" ? 100 : 0,
           status: (d.status as any) || "Open",
           labels: typeof d.labels === "string" ? d.labels : Array.isArray(d.labels) ? d.labels.join(", ") : (labels || ""),
+          description: d.description || payload.description || "",
         };
         setRows((prev) => editingId ? prev.map(p => p.id === row.id ? row : p) : [row, ...prev]);
+        // Reset filters/search so the new/updated project is visible immediately
+        setStatusFilter("__all__");
+        setLabelFilter("__all__");
+        setStartFrom("");
+        setDeadlineTo("");
+        setQuery("");
         if (!keepOpen) setOpenAdd(false);
         setEditingId(null);
         toast.success(editingId ? "Project updated" : "Project added");
+
+        // Lightweight refetch to ensure fresh list without manual reload
+        try {
+          const ref = await fetch(`${API_BASE}/api/projects`);
+          if (ref.ok) {
+            const data = await ref.json();
+            const mapped: Row[] = (Array.isArray(data) ? data : []).map((d: any) => ({
+              id: String(d._id || ""),
+              title: d.title || "-",
+              clientId: d.clientId ? String(d.clientId) : undefined,
+              client: d.client || "-",
+              price: d.price != null ? String(d.price) : "-",
+              start: d.start ? new Date(d.start).toISOString().slice(0,10) : "-",
+              due: d.deadline ? new Date(d.deadline).toISOString().slice(0,10) : "-",
+              progress: (()=>{ const p = typeof d.progress === 'number' ? Number(d.progress) : (d.status === "Completed" ? 100 : 0); return Math.max(0, Math.min(100, isNaN(p) ? 0 : p)); })(),
+              status: (d.status as any) || "Open",
+              labels: typeof d.labels === "string" ? d.labels : Array.isArray(d.labels) ? d.labels.join(", ") : "",
+              description: d.description || "",
+            }));
+            setRows(mapped);
+          }
+        } catch {}
       }
     } catch {}
   };
@@ -188,7 +224,38 @@ export default function Overview() {
     setStart(r.start && r.start !== "-" ? r.start : "");
     setDeadline(r.due && r.due !== "-" ? r.due : "");
     setPrice(r.price && r.price !== "-" ? r.price : "");
+    setLabels(r.labels || "");
+    setDesc(r.description || "");
     setOpenAdd(true);
+  };
+
+  const openProgressEditor = (r: Row) => {
+    setProgressProjectId(r.id);
+    setProgressValue(r.progress || 0);
+    setProgressOpen(true);
+  };
+
+  const saveProgressValue = async () => {
+    if (!progressProjectId) return;
+    const value = Math.max(0, Math.min(100, Number(progressValue) || 0));
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${progressProjectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ progress: value }),
+      });
+      if (res.ok) {
+        setRows(prev => prev.map(r => r.id === progressProjectId ? { ...r, progress: value, status: r.status } : r));
+        toast.success("Progress updated");
+      } else {
+        setRows(prev => prev.map(r => r.id === progressProjectId ? { ...r, progress: value } : r));
+      }
+    } catch {
+      setRows(prev => prev.map(r => r.id === progressProjectId ? { ...r, progress: value } : r));
+    } finally {
+      setProgressOpen(false);
+      setProgressProjectId(null);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -305,6 +372,7 @@ export default function Overview() {
           progress: d.status === "Completed" ? 100 : 0,
           status: (d.status as any) || "Open",
           labels: typeof d.labels === "string" ? d.labels : Array.isArray(d.labels) ? d.labels.join(", ") : "",
+          description: d.description || "",
         }));
         setRows(mapped);
       }
@@ -504,13 +572,15 @@ export default function Overview() {
                 <TableCell>{r.price}</TableCell>
                 <TableCell>{r.start}</TableCell>
                 <TableCell className={new Date(r.due) < new Date(r.start) ? "text-destructive font-medium" : ""}>{r.due}</TableCell>
-                <TableCell className="min-w-[120px]">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 bg-muted/50 rounded flex-1">
-                      <div className="h-2 rounded bg-muted" style={{ width: `${r.progress}%` }} />
+                <TableCell className="min-w-[140px]">
+                  <button className="w-full text-left" onClick={() => openProgressEditor(r)} title="Click to update progress">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 bg-muted/50 rounded flex-1">
+                        <div className="h-2 rounded bg-primary" style={{ width: `${r.progress}%` }} />
+                      </div>
+                      <div className="text-xs text-muted-foreground w-10 text-right">{r.progress}%</div>
                     </div>
-                    <div className="text-xs text-muted-foreground w-10 text-right">{r.progress}%</div>
-                  </div>
+                  </button>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -526,15 +596,52 @@ export default function Overview() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => navigate(`/projects/overview/${r.id}`)}>View</Button>
-                  <Button variant="outline" size="sm" onClick={() => deleteProject(r.id)}>Delete</Button>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" aria-label="Actions">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/projects/overview/${r.id}`)}>
+                        <Eye className="w-4 h-4 mr-2"/> View
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openEdit(r)}>
+                        <Pencil className="w-4 h-4 mr-2"/> Edit / Update
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => deleteProject(r.id)} className="text-destructive">
+                        <Trash2 className="w-4 h-4 mr-2"/> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Card>
+
+      {/* Progress editor */}
+      <Dialog open={progressOpen} onOpenChange={setProgressOpen}>
+        <DialogContent className="bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update Progress</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Progress: {progressValue}%</Label>
+            <Input type="range" min={0} max={100} value={progressValue} onChange={(e)=>setProgressValue(Number(e.target.value))} />
+            <Input type="number" min={0} max={100} value={progressValue} onChange={(e)=>setProgressValue(Math.max(0, Math.min(100, Number(e.target.value)||0)))} />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={saveProgressValue}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
