@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,101 @@ export default function TimesheetsReport() {
   const [client, setClient] = useState("-");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("details");
+  const [dateFrom, setDateFrom] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10));
+  const [dateTo, setDateTo] = useState<string>(new Date().toISOString().slice(0,10));
+  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+
+  const API_BASE = "http://localhost:5000";
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const [tRes, pRes] = await Promise.all([
+          fetch(`${API_BASE}/api/tasks`),
+          fetch(`${API_BASE}/api/projects`),
+        ]);
+        const tData = tRes.ok ? await tRes.json() : [];
+        const pData = pRes.ok ? await pRes.json() : [];
+        setTasks(Array.isArray(tData) ? tData : []);
+        setProjects(Array.isArray(pData) ? pData : []);
+      } catch {
+        setTasks([]);
+        setProjects([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const projectById = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of projects) if (p?._id) m.set(String(p._id), p);
+    return m;
+  }, [projects]);
+
+  const memberOptions = useMemo(() => {
+    const s = new Set<string>(["-"]);
+    for (const t of tasks) {
+      const arr: any[] = Array.isArray(t?.assignees) ? t.assignees : [];
+      for (const a of arr) if (a?.name) s.add(String(a.name));
+    }
+    return Array.from(s.values());
+  }, [tasks]);
+
+  const projectOptions = useMemo(() => {
+    const s = new Set<string>(["-"]);
+    for (const t of tasks) if (t?.projectTitle) s.add(String(t.projectTitle));
+    return Array.from(s.values());
+  }, [tasks]);
+
+  const clientOptions = useMemo(() => {
+    const s = new Set<string>(["-"]);
+    for (const p of projects) if (p?.client) s.add(String(p.client));
+    return Array.from(s.values());
+  }, [projects]);
+
+  const normalize = (s?: string) => (s || "").toLowerCase();
+
+  const filteredRows = useMemo(() => {
+    const q = normalize(query);
+    const from = dateFrom ? new Date(dateFrom) : undefined;
+    const to = dateTo ? new Date(dateTo) : undefined;
+    return tasks
+      .filter((t) => {
+        const createdAt = t?.createdAt ? new Date(t.createdAt) : undefined;
+        if (from && createdAt && createdAt < from) return false;
+        if (to && createdAt && createdAt > to) return false;
+        const assignees: any[] = Array.isArray(t?.assignees) ? t.assignees : [];
+        const hasMember = member === "-" || assignees.some((a) => normalize(a?.name) === normalize(member));
+        const hasProject = project === "-" || normalize(t?.projectTitle) === normalize(project);
+        const proj = t?.projectId ? projectById.get(String(t.projectId)) : undefined;
+        const hasClient = client === "-" || normalize(proj?.client) === normalize(client);
+        const text = `${t?.title || ""} ${t?.description || ""} ${t?.projectTitle || ""} ${assignees.map(a=>a?.name).join(" ")}`;
+        const matches = !q || normalize(text).includes(q);
+        return hasMember && hasProject && hasClient && matches;
+      })
+      .map((t) => {
+        const assignees: any[] = Array.isArray(t?.assignees) ? t.assignees : [];
+        const proj = t?.projectId ? projectById.get(String(t.projectId)) : undefined;
+        const start = t?.createdAt ? new Date(t.createdAt) : undefined;
+        const end = t?.deadline ? new Date(t.deadline) : undefined;
+        const totalHours = start && end ? Math.max(0, (end.getTime() - start.getTime()) / (1000*60*60)) : 0;
+        return {
+          id: String(t?._id || Math.random()),
+          member: assignees.map((a)=>a?.name).filter(Boolean).join(", ") || "-",
+          project: t?.projectTitle || "-",
+          client: proj?.client || "-",
+          task: t?.title || "-",
+          start: start ? start.toLocaleString() : "-",
+          end: end ? end.toLocaleString() : "-",
+          total: totalHours.toFixed(2),
+        };
+      });
+  }, [tasks, projects, member, project, client, query, dateFrom, dateTo, projectById]);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -46,24 +141,30 @@ export default function TimesheetsReport() {
               <Select value={member} onValueChange={setMember}>
                 <SelectTrigger className="w-40"><SelectValue placeholder="- Member -"/></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="-">- Member -</SelectItem>
+                  {memberOptions.map(opt => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={project} onValueChange={setProject}>
                 <SelectTrigger className="w-40"><SelectValue placeholder="- Project -"/></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="-">- Project -</SelectItem>
+                  {projectOptions.map(opt => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={client} onValueChange={setClient}>
                 <SelectTrigger className="w-40"><SelectValue placeholder="- Client -"/></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="-">- Client -</SelectItem>
+                  {clientOptions.map(opt => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Input type="date" className="w-44" defaultValue={new Date().toISOString().slice(0,10)} />
+              <Input type="date" className="w-44" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} />
               <span className="text-sm text-muted-foreground">Date</span>
-              <Input type="date" className="w-44" defaultValue={new Date().toISOString().slice(0,10)} />
+              <Input type="date" className="w-44" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} />
             </div>
 
             <TabsContent value="details">
@@ -81,15 +182,41 @@ export default function TimesheetsReport() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">No record found.</TableCell>
-                  </TableRow>
+                  {loading ? (
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground"><div className="h-9 animate-pulse rounded bg-muted/50"/></TableCell></TableRow>
+                  ) : filteredRows.length ? (
+                    <>
+                      {filteredRows.map(r => (
+                        <TableRow key={r.id}>
+                          <TableCell>{r.member}</TableCell>
+                          <TableCell>{r.project}</TableCell>
+                          <TableCell>{r.client}</TableCell>
+                          <TableCell>{r.task}</TableCell>
+                          <TableCell>{r.start}</TableCell>
+                          <TableCell>{r.end}</TableCell>
+                          <TableCell>{r.total} h</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-muted/30 font-medium">
+                        <TableCell colSpan={6}>Total</TableCell>
+                        <TableCell>{filteredRows.reduce((s,r)=>s+Number(r.total||0),0).toFixed(2)} h</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </>
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">No record found.</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TabsContent>
 
             <TabsContent value="summary">
-              <div className="h-48 rounded-lg border bg-muted/20 flex items-center justify-center text-sm text-muted-foreground">Summary placeholder</div>
+              <div className="h-48 rounded-lg border bg-muted/20 flex items-center justify-center text-sm text-muted-foreground">
+                Total hours: {filteredRows.reduce((s,r)=>s+Number(r.total||0),0).toFixed(2)}
+              </div>
             </TabsContent>
             <TabsContent value="chart">
               <div className="h-64 rounded-lg border bg-muted/20 flex items-center justify-center text-sm text-muted-foreground">Chart placeholder</div>

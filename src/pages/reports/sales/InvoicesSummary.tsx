@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Search, FileDown, Printer, TrendingUp, Wallet, Receipt, CircleDollarSign, Filter, Eye } from "lucide-react";
 import ReportsNav from "../ReportsNav";
+import { Link } from "react-router-dom";
 import { toast } from "@/components/ui/sonner";
 
 const API_BASE = "http://localhost:5000";
@@ -38,6 +40,11 @@ export default function InvoicesSummary() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [show, setShow] = useState({ kpis: true, invoices: true, invoiceDetails: true, orders: true, contracts: true, expenses: true, items: true });
+  const [rangeMode, setRangeMode] = useState<'yearly' | 'monthly' | 'custom'>('yearly');
+  const [month, setMonth] = useState<number>(new Date().getMonth());
+  const [dateFrom, setDateFrom] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10));
+  const [dateTo, setDateTo] = useState<string>(new Date().toISOString().slice(0,10));
 
   const load = async () => {
     try {
@@ -70,6 +77,34 @@ export default function InvoicesSummary() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem("reports_sales_sections");
+      if (s) setShow((prev) => ({ ...prev, ...JSON.parse(s) }));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("reports_sales_sections", JSON.stringify(show)); } catch {}
+  }, [show]);
+ 
+  const currencyFmt = useMemo(() => new Intl.NumberFormat("en-US", { style: "currency", currency }), [currency]);
+  const money = (n: number) => currencyFmt.format(Number(n || 0));
+
+  const withinRange = (raw?: any) => {
+    if (!raw) return false;
+    const d = new Date(raw as any);
+    if (Number.isNaN(d.getTime())) return false;
+    if (rangeMode === 'yearly') return d.getFullYear() === year;
+    if (rangeMode === 'monthly') return d.getFullYear() === year && d.getMonth() === month;
+    if (rangeMode === 'custom') {
+      const from = dateFrom ? new Date(dateFrom) : undefined;
+      const to = dateTo ? new Date(dateTo) : undefined;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    }
+    return true;
+  };
 
   const clientNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -89,17 +124,10 @@ export default function InvoicesSummary() {
   }, [invoices]);
 
   const filteredAgg = useMemo(() => {
-    // Filter by year and query, aggregate per client
-    const y = Number(year);
     const matches = (s: string) => (s || "").toLowerCase().includes(query.trim().toLowerCase());
-    const invYear = (dt?: string) => {
-      if (!dt) return NaN;
-      const d = new Date(dt);
-      return d.getFullYear();
-    };
     const grp = new Map<string, { client: string; clientId?: string; count: number; total: number; tax1: number; tax2: number; tds: number; paid: number }>();
-    const inYearInv = invoices.filter((i) => !y || invYear(i.issueDate as any) === y);
-    const invFiltered = inYearInv.filter((i) => !query || matches(i.client || ""));
+    const inRangeInv = invoices.filter((i: any) => withinRange(i?.issueDate || i?.billDate || i?.billdate || i?.date || i?.createdAt || i?.dueDate));
+    const invFiltered = inRangeInv.filter((i) => !query || matches(i.client || ""));
     for (const i of invFiltered) {
       const key = i.clientId || i.client || "-";
       const row = grp.get(key) || { client: i.client || "-", clientId: i.clientId, count: 0, total: 0, tax1: 0, tax2: 0, tds: 0, paid: 0 };
@@ -112,8 +140,8 @@ export default function InvoicesSummary() {
       grp.set(key, row);
     }
     // Payments aggregation per client (resolve via invoice when needed)
-    const inYearPay = payments.filter((p) => !y || invYear(p.date as any) === y);
-    for (const p of inYearPay) {
+    const inRangePay = payments.filter((p) => withinRange(p.date as any));
+    for (const p of inRangePay) {
       const inv = p.invoiceId ? invById.get(String(p.invoiceId)) : undefined;
       const resolvedClientId = (p.clientId || inv?.clientId) ? String(p.clientId || inv?.clientId) : undefined;
       const resolvedClient = (p.client || inv?.client || "-");
@@ -123,14 +151,69 @@ export default function InvoicesSummary() {
       grp.set(key, row);
     }
     return Array.from(grp.values()).sort((a, b) => b.total - a.total);
-  }, [invoices, payments, year, query]);
+  }, [invoices, payments, year, month, dateFrom, dateTo, rangeMode, query]);
+
+  
+
+  const invoiceDetails = useMemo(() => {
+    const matches = (s: string) => (s || "").toLowerCase().includes(query.trim().toLowerCase());
+    const payByInv = new Map<string, number>();
+    const inRangePay = payments.filter((p) => withinRange(p?.date));
+    for (const p of inRangePay) {
+      const id = p.invoiceId ? String(p.invoiceId) : undefined;
+      if (!id) continue;
+      payByInv.set(id, (payByInv.get(id) || 0) + Number(p.amount || 0));
+    }
+    const inRangeInv = invoices.filter((i: any) => withinRange(i?.issueDate || i?.billDate || i?.billdate || i?.date || i?.createdAt || i?.dueDate));
+    const flt = inRangeInv.filter((i: any) => !query || matches(i.client || "") || matches(i.number || ""));
+    const rows = flt.map((i: any) => {
+      const base = Number(i.amount || 0);
+      const tax1 = base * (Number(i.tax1 || 0) / 100);
+      const tax2 = base * (Number(i.tax2 || 0) / 100);
+      const tds = Number(i.tds || 0);
+      const total = base + tax1 + tax2;
+      const paid = payByInv.get(String(i._id)) || 0;
+      const due = Math.max(0, total - paid - tds);
+      const issueRaw = i.issueDate || i.billDate || i.createdAt || i.dueDate;
+      const dueRaw = i.dueDate;
+      return {
+        id: String(i._id),
+        number: i.number || "-",
+        client: i.client || "-",
+        clientId: i.clientId ? String(i.clientId) : undefined,
+        issueDate: issueRaw ? new Date(issueRaw).toLocaleDateString() : "-",
+        dueDate: dueRaw ? new Date(dueRaw).toLocaleDateString() : "-",
+        issueTs: issueRaw ? new Date(issueRaw).getTime() : 0,
+        amount: base,
+        tax1,
+        tax2,
+        tds,
+        total,
+        paid,
+        due,
+        status: i.status || "-",
+      };
+    });
+    return rows.sort((a,b)=> b.issueTs - a.issueTs);
+  }, [invoices, payments, year, month, dateFrom, dateTo, rangeMode, query]);
+
+  const detailsByClient = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const r of invoiceDetails) {
+      const key = String(r.clientId || r.client);
+      const arr = m.get(key) || [];
+      arr.push(r);
+      m.set(key, arr);
+    }
+    return m;
+  }, [invoiceDetails]);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const ordersAgg = useMemo(() => {
-    const y = Number(year);
     const matches = (s: string) => (s || "").toLowerCase().includes(query.trim().toLowerCase());
-    const getYear = (dt?: string) => { if (!dt) return NaN; const d = new Date(dt); return d.getFullYear(); };
     const grp = new Map<string, { client: string; clientId?: string; count: number; amount: number }>();
-    const inYear = orders.filter(o => !y || getYear(o.orderDate as any) === y);
+    const inYear = orders.filter(o => withinRange(o.orderDate as any));
     const flt = inYear.filter(o => !query || matches(o.client || ""));
     for (const o of flt) {
       const key = o.clientId || o.client || "-";
@@ -140,14 +223,12 @@ export default function InvoicesSummary() {
       grp.set(key, row);
     }
     return Array.from(grp.values()).sort((a,b)=>b.amount-a.amount);
-  }, [orders, year, query]);
+  }, [orders, year, month, dateFrom, dateTo, rangeMode, query]);
 
   const contractsAgg = useMemo(() => {
-    const y = Number(year);
     const matches = (s: string) => (s || "").toLowerCase().includes(query.trim().toLowerCase());
-    const getYear = (dt?: string) => { if (!dt) return NaN; const d = new Date(dt); return d.getFullYear(); };
     const grp = new Map<string, { client: string; clientId?: string; count: number; amount: number; tax1: number; tax2: number }>();
-    const inYear = contracts.filter(c => !y || getYear(c.contractDate as any) === y);
+    const inYear = contracts.filter(c => withinRange(c.contractDate as any));
     const flt = inYear.filter(c => !query || matches(c.client || ""));
     for (const c of flt) {
       const key = c.clientId || c.client || "-";
@@ -161,13 +242,11 @@ export default function InvoicesSummary() {
       grp.set(key, row);
     }
     return Array.from(grp.values()).sort((a,b)=>b.amount-a.amount);
-  }, [contracts, year, query]);
+  }, [contracts, year, month, dateFrom, dateTo, rangeMode, query]);
 
   const expensesAgg = useMemo(() => {
-    const y = Number(year);
-    const getYear = (dt?: string) => { if (!dt) return NaN; const d = new Date(dt); return d.getFullYear(); };
     const grp = new Map<string, { clientId?: string; amount: number; tax: number; tax2: number }>();
-    const inYear = expenses.filter(e => !y || getYear(e.date as any) === y);
+    const inYear = expenses.filter(e => withinRange(e.date as any));
     for (const e of inYear) {
       const key = e.clientId ? String(e.clientId) : "-";
       const row = grp.get(key) || { clientId: e.clientId ? String(e.clientId) : undefined, amount: 0, tax: 0, tax2: 0 };
@@ -177,13 +256,26 @@ export default function InvoicesSummary() {
       grp.set(key, row);
     }
     return Array.from(grp.values()).sort((a,b)=> b.amount - a.amount);
-  }, [expenses, year]);
+  }, [expenses, year, month, dateFrom, dateTo, rangeMode]);
+ 
+  const kpis = useMemo(() => {
+    const invCount = filteredAgg.reduce((s, r) => s + r.count, 0);
+    const invoiced = filteredAgg.reduce((s, r) => s + r.total + r.tax1 + r.tax2, 0);
+    const paid = filteredAgg.reduce((s, r) => s + r.paid, 0);
+    const tds = filteredAgg.reduce((s, r) => s + r.tds, 0);
+    const due = Math.max(0, invoiced - paid - tds);
+    const ordersTotal = ordersAgg.reduce((s, r) => s + r.amount, 0);
+    const contractsTotal = contractsAgg.reduce((s, r) => s + r.amount + r.tax1 + r.tax2, 0);
+    const expensesTotal = expensesAgg.reduce((s, r) => s + r.amount + r.tax + r.tax2, 0);
+    return { invCount, invoiced, paid, due, ordersTotal, contractsTotal, expensesTotal };
+  }, [filteredAgg, ordersAgg, contractsAgg, expensesAgg]);
 
   const itemsAgg = useMemo(() => {
     type Row = { name: string; qty: number; amount: number };
     const byName = new Map<string, Row>();
     // From invoices
-    for (const inv of invoices) {
+    const invInRange = invoices.filter((i: any) => withinRange(i?.issueDate || i?.billDate || i?.billdate || i?.date || i?.createdAt || i?.dueDate));
+    for (const inv of invInRange) {
       const list: any[] = Array.isArray((inv as any).items) ? (inv as any).items : [];
       for (const it of list) {
         const name = String(it.name || it.title || "-");
@@ -197,7 +289,8 @@ export default function InvoicesSummary() {
       }
     }
     // From orders
-    for (const ord of orders) {
+    const ordInRange = orders.filter(o => withinRange(o.orderDate as any));
+    for (const ord of ordInRange) {
       const list: any[] = Array.isArray((ord as any).items) ? (ord as any).items : [];
       for (const it of list) {
         const name = String(it.name || "-");
@@ -211,7 +304,7 @@ export default function InvoicesSummary() {
       }
     }
     return Array.from(byName.values()).sort((a,b)=> b.amount - a.amount).slice(0, 20);
-  }, [invoices, orders]);
+  }, [invoices, orders, year, month, dateFrom, dateTo, rangeMode]);
 
   const exportCSV = () => {
     const header = ["Client","Count","Invoice total","Tax A","Tax B","TDS","Payment received","Due"];
@@ -250,7 +343,71 @@ export default function InvoicesSummary() {
         <h1 className="text-sm text-muted-foreground">Invoices summary</h1>
       </div>
       <ReportsNav />
-
+      
+      {show.kpis && (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Total invoiced</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.invoiced)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Year {year}</div>
+            </div>
+            <div className="rounded-full bg-primary/10 p-2 text-primary"><TrendingUp className="h-5 w-5"/></div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Payment received</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.paid)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Across {kpis.invCount} invoices</div>
+            </div>
+            <div className="rounded-full bg-emerald-500/10 p-2 text-emerald-600"><Wallet className="h-5 w-5"/></div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Outstanding due</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.due)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">After TDS</div>
+            </div>
+            <div className="rounded-full bg-amber-500/10 p-2 text-amber-600"><CircleDollarSign className="h-5 w-5"/></div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Orders amount</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.ordersTotal)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Year {year}</div>
+            </div>
+            <div className="rounded-full bg-blue-500/10 p-2 text-blue-600"><Receipt className="h-5 w-5"/></div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Contracts amount</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.contractsTotal)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Incl. taxes</div>
+            </div>
+            <div className="rounded-full bg-indigo-500/10 p-2 text-indigo-600"><TrendingUp className="h-5 w-5"/></div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-gradient-to-br from-white to-muted/40 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground">Expenses (by client)</div>
+              <div className="mt-1 text-xl font-semibold">{money(kpis.expensesTotal)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Incl. taxes</div>
+            </div>
+            <div className="rounded-full bg-rose-500/10 p-2 text-rose-600"><TrendingUp className="h-5 w-5"/></div>
+          </div>
+        </div>
+      </div>
+      )}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
@@ -269,13 +426,54 @@ export default function InvoicesSummary() {
                 <Button variant="outline" size="icon" onClick={()=>setYear(y=>y+1)}><ChevronRight className="w-4 h-4"/></Button>
                 <Button variant="success" size="icon" onClick={load}><RefreshCw className="w-4 h-4"/></Button>
               </div>
-              <Button variant="outline" size="sm">Yearly</Button>
-              <Button variant="outline" size="sm" disabled>Monthly</Button>
-              <Button variant="outline" size="sm" disabled>Custom</Button>
+              <Button variant={rangeMode==='yearly' ? 'secondary' : 'outline'} size="sm" onClick={()=>setRangeMode('yearly')}>Yearly</Button>
+              <Button variant={rangeMode==='monthly' ? 'secondary' : 'outline'} size="sm" onClick={()=>setRangeMode('monthly')}>Monthly</Button>
+              <Button variant={rangeMode==='custom' ? 'secondary' : 'outline'} size="sm" onClick={()=>setRangeMode('custom')}>Custom</Button>
+              {rangeMode === 'monthly' && (
+                <Select value={String(month)} onValueChange={(v)=>setMonth(Number(v))}>
+                  <SelectTrigger className="w-36"><SelectValue placeholder="Month"/></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">January</SelectItem>
+                    <SelectItem value="1">February</SelectItem>
+                    <SelectItem value="2">March</SelectItem>
+                    <SelectItem value="3">April</SelectItem>
+                    <SelectItem value="4">May</SelectItem>
+                    <SelectItem value="5">June</SelectItem>
+                    <SelectItem value="6">July</SelectItem>
+                    <SelectItem value="7">August</SelectItem>
+                    <SelectItem value="8">September</SelectItem>
+                    <SelectItem value="9">October</SelectItem>
+                    <SelectItem value="10">November</SelectItem>
+                    <SelectItem value="11">December</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              {rangeMode === 'custom' && (
+                <div className="inline-flex items-center gap-2">
+                  <Input type="date" className="w-40" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} />
+                  <span className="text-sm text-muted-foreground">to</span>
+                  <Input type="date" className="w-40" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportCSV}>Excel</Button>
-              <Button variant="outline" size="sm" onClick={printTable}>Print</Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1"><Filter className="w-4 h-4"/> Filter</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
+                  <DropdownMenuLabel>Sections</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem checked={show.kpis} onCheckedChange={(v)=>setShow(s=>({...s, kpis: !!v}))}>KPI summary</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={show.invoices} onCheckedChange={(v)=>setShow(s=>({...s, invoices: !!v}))}>Invoices table</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={show.orders} onCheckedChange={(v)=>setShow(s=>({...s, orders: !!v}))}>Orders summary</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={show.contracts} onCheckedChange={(v)=>setShow(s=>({...s, contracts: !!v}))}>Contracts summary</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={show.expenses} onCheckedChange={(v)=>setShow(s=>({...s, expenses: !!v}))}>Expenses by client</DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={show.items} onCheckedChange={(v)=>setShow(s=>({...s, items: !!v}))}>Top items</DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1"><FileDown className="w-4 h-4"/> Excel</Button>
+              <Button variant="outline" size="sm" onClick={printTable} className="gap-1"><Printer className="w-4 h-4"/> Print</Button>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input placeholder="Search" value={query} onChange={(e)=>setQuery(e.target.value)} className="pl-9 w-56" />
@@ -283,6 +481,7 @@ export default function InvoicesSummary() {
             </div>
           </div>
 
+          {show.invoices && (
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
@@ -298,7 +497,7 @@ export default function InvoicesSummary() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground"><div className="h-9 animate-pulse rounded bg-muted/50"/></TableCell></TableRow>
               ) : filteredAgg.length ? (
                 filteredAgg.map((r) => {
                   const due = Math.max(0, r.total + r.tax1 + r.tax2 - r.paid - r.tds);
@@ -307,12 +506,12 @@ export default function InvoicesSummary() {
                     <TableRow key={`${r.clientId || r.client}`}>
                       <TableCell className="whitespace-nowrap">{display}</TableCell>
                       <TableCell>{r.count}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.total.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax1.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax2.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tds.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.paid.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap font-medium">{due.toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.total)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax1)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tds)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.paid)}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium">{money(due)}</TableCell>
                     </TableRow>
                   );
                 })
@@ -321,10 +520,99 @@ export default function InvoicesSummary() {
                   <TableCell colSpan={8} className="text-center text-muted-foreground">No record found.</TableCell>
                 </TableRow>
               )}
+              {!loading && filteredAgg.length > 0 && (
+                <TableRow className="bg-muted/30 font-medium">
+                  <TableCell>Total</TableCell>
+                  <TableCell>{filteredAgg.reduce((s,r)=>s+r.count,0)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(filteredAgg.reduce((s,r)=>s+r.total,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(filteredAgg.reduce((s,r)=>s+r.tax1,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(filteredAgg.reduce((s,r)=>s+r.tax2,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(filteredAgg.reduce((s,r)=>s+r.tds,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(filteredAgg.reduce((s,r)=>s+r.paid,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(Math.max(0, filteredAgg.reduce((s,r)=>s + (r.total + r.tax1 + r.tax2 - r.paid - r.tds),0)))}</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {show.invoiceDetails && (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-muted-foreground">Invoices detail</div>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>No.</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Issue date</TableHead>
+                <TableHead>Due date</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>TAX</TableHead>
+                <TableHead>Second TAX</TableHead>
+                <TableHead>TDS</TableHead>
+                <TableHead>Paid</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground"><div className="h-9 animate-pulse rounded bg-muted/50"/></TableCell></TableRow>
+              ) : invoiceDetails.length ? (
+                <>
+                  {invoiceDetails.map(r => {
+                    const displayClient = r.clientId && clientNameById.get(String(r.clientId)) ? clientNameById.get(String(r.clientId))! : r.client;
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="whitespace-nowrap">{r.number}</TableCell>
+                        <TableCell className="whitespace-nowrap">{displayClient}</TableCell>
+                        <TableCell>{r.issueDate}</TableCell>
+                        <TableCell>{r.dueDate}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.amount)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.tax1)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.tax2)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.tds)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.paid)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{money(r.total)}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">{money(r.due)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{r.status}</TableCell>
+                        <TableCell>
+                          <Link to={`/invoices/${r.id}`}>
+                            <Button variant="outline" size="sm" className="gap-1"><Eye className="w-4 h-4"/> View</Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  <TableRow className="bg-muted/30 font-medium">
+                    <TableCell colSpan={4}>Total</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.amount,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.tax1,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.tax2,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.tds,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.paid,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.total,0))}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(invoiceDetails.reduce((s,r)=>s+r.due,0))}</TableCell>
+                    <TableCell colSpan={2}></TableCell>
+                  </TableRow>
+                </>
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={13} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+      )}
 
       {/* Orders summary (sales module) */}
       <Card>
@@ -348,13 +636,20 @@ export default function InvoicesSummary() {
                     <TableRow key={`${r.clientId || r.client}`}>
                       <TableCell className="whitespace-nowrap">{display}</TableCell>
                       <TableCell>{r.count}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.amount)}</TableCell>
                     </TableRow>
                   );
                 })
               ) : (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              )}
+              {ordersAgg.length > 0 && (
+                <TableRow className="bg-muted/30 font-medium">
+                  <TableCell>Total</TableCell>
+                  <TableCell>{ordersAgg.reduce((s,r)=>s+r.count,0)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(ordersAgg.reduce((s,r)=>s+r.amount,0))}</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -386,15 +681,24 @@ export default function InvoicesSummary() {
                     <TableRow key={`${r.clientId || r.client}`}>
                       <TableCell className="whitespace-nowrap">{display}</TableCell>
                       <TableCell>{r.count}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax1.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax2.toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.amount)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax1)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax2)}</TableCell>
                     </TableRow>
                   );
                 })
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              )}
+              {contractsAgg.length > 0 && (
+                <TableRow className="bg-muted/30 font-medium">
+                  <TableCell>Total</TableCell>
+                  <TableCell>{contractsAgg.reduce((s,r)=>s+r.count,0)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(contractsAgg.reduce((s,r)=>s+r.amount,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(contractsAgg.reduce((s,r)=>s+r.tax1,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(contractsAgg.reduce((s,r)=>s+r.tax2,0))}</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -424,15 +728,23 @@ export default function InvoicesSummary() {
                   return (
                     <TableRow key={`${r.clientId || '-'}`}>
                       <TableCell className="whitespace-nowrap">{display}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax.toLocaleString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.tax2.toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.amount)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{money(r.tax2)}</TableCell>
                     </TableRow>
                   );
                 })
               ) : (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              )}
+              {expensesAgg.length > 0 && (
+                <TableRow className="bg-muted/30 font-medium">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(expensesAgg.reduce((s,r)=>s+r.amount,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(expensesAgg.reduce((s,r)=>s+r.tax,0))}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(expensesAgg.reduce((s,r)=>s+r.tax2,0))}</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -460,12 +772,19 @@ export default function InvoicesSummary() {
                   <TableRow key={r.name}>
                     <TableCell className="whitespace-nowrap">{r.name}</TableCell>
                     <TableCell>{r.qty}</TableCell>
-                    <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
+                    <TableCell className="whitespace-nowrap">{money(r.amount)}</TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">No record found.</TableCell>
+                </TableRow>
+              )}
+              {itemsAgg.length > 0 && (
+                <TableRow className="bg-muted/30 font-medium">
+                  <TableCell>Total</TableCell>
+                  <TableCell>{itemsAgg.reduce((s,r)=>s+r.qty,0)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{money(itemsAgg.reduce((s,r)=>s+r.amount,0))}</TableCell>
                 </TableRow>
               )}
             </TableBody>
