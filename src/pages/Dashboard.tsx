@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import {
   BarChart,
   Bar,
@@ -15,6 +17,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Area,
+  AreaChart,
 } from "recharts";
 import {
   Clock,
@@ -26,6 +30,30 @@ import {
   TrendingUp,
   Search,
   MoreHorizontal,
+  DollarSign,
+  Target,
+  Activity,
+  FileText,
+  Settings,
+  Bell,
+  User,
+  MapPin,
+  Phone,
+  Mail,
+  Download,
+  Eye,
+  Edit,
+  Plus,
+  ArrowUp,
+  ArrowDown,
+  Star,
+  Shield,
+  Zap,
+  Globe,
+  Building,
+  Award,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
@@ -33,12 +61,12 @@ import { useEffect, useState } from "react";
 const API_BASE = "http://localhost:5000";
 
 const revenueData = [
-  { month: "Jan", revenue: 4000 },
-  { month: "Feb", revenue: 3000 },
-  { month: "Mar", revenue: 2000 },
-  { month: "Apr", revenue: 2780 },
-  { month: "May", revenue: 1890 },
-  { month: "Jun", revenue: 2390 },
+  { month: "Jan", revenue: 4000, profit: 2400 },
+  { month: "Feb", revenue: 3000, profit: 1398 },
+  { month: "Mar", revenue: 2000, profit: 800 },
+  { month: "Apr", revenue: 2780, profit: 1908 },
+  { month: "May", revenue: 1890, profit: 1200 },
+  { month: "Jun", revenue: 2390, profit: 1500 },
 ];
 
 const invoiceData = [
@@ -54,6 +82,34 @@ const incomeData = [
   { month: "Apr", income: 2780, expense: 3908 },
   { month: "May", income: 1890, expense: 4800 },
   { month: "Jun", income: 2390, expense: 3800 },
+];
+
+const projectStatusData = [
+  { name: "Completed", value: 45, color: "#10b981" },
+  { name: "In Progress", value: 28, color: "#3b82f6" },
+  { name: "On Hold", value: 12, color: "#f59e0b" },
+  { name: "Not Started", value: 8, color: "#ef4444" },
+];
+
+const teamPerformanceData = [
+  { name: "Development", completed: 85, total: 100 },
+  { name: "Design", completed: 72, total: 85 },
+  { name: "Marketing", completed: 68, total: 75 },
+  { name: "Sales", completed: 92, total: 110 },
+];
+
+const recentActivities = [
+  { action: "Project completed", detail: "E-commerce Platform", time: "2 hours ago", type: "success" },
+  { action: "New team member", detail: "Sarah Johnson joined", time: "3 hours ago", type: "info" },
+  { action: "Invoice sent", detail: "Client ABC - $5,000", time: "5 hours ago", type: "warning" },
+  { action: "Task deadline", detail: "Mobile App UI Design", time: "1 day ago", type: "danger" },
+];
+
+const topPerformers = [
+  { name: "Alex Chen", avatar: "AC", role: "Frontend Developer", tasks: 45, rating: 4.9 },
+  { name: "Emma Wilson", avatar: "EW", role: "Project Manager", tasks: 38, rating: 4.8 },
+  { name: "Mike Johnson", avatar: "MJ", role: "Backend Developer", tasks: 42, rating: 4.7 },
+  { name: "Sarah Davis", avatar: "SD", role: "UX Designer", tasks: 35, rating: 4.9 },
 ];
 
 type ProjectRow = { id: string; name: string; estimate: string };
@@ -156,127 +212,175 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Top Stats Row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Card className="bg-card">
+      {/* Welcome Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-blue-100">Welcome back! Here's what's happening across your organization today.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm text-blue-200">Total Revenue</p>
+              <p className="text-3xl font-bold">${totalRevenue.toLocaleString()}</p>
+            </div>
+            <Avatar className="h-16 w-16 border-2 border-white">
+              <AvatarImage src="/api/placeholder/64/64" alt="Admin" />
+              <AvatarFallback className="bg-white text-blue-600 text-xl">AD</AvatarFallback>
+            </Avatar>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Click started at</p>
-                <p className="text-2xl font-bold mt-1">0</p>
+                <p className="text-sm text-green-600 font-medium">Active Projects</p>
+                <p className="text-3xl font-bold text-green-900 mt-1">{projectCounts.open}</p>
+                <p className="text-xs text-green-600 mt-1">+{projectCounts.completed} completed</p>
               </div>
-              <Clock className="w-8 h-8 text-primary" />
+              <div className="bg-green-200 p-3 rounded-full">
+                <Briefcase className="w-6 h-6 text-green-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">My open tasks</p>
-                <p className="text-2xl font-bold mt-1">{openTasksCount}</p>
+                <p className="text-sm text-blue-600 font-medium">Open Tasks</p>
+                <p className="text-3xl font-bold text-blue-900 mt-1">{openTasksCount}</p>
+                <p className="text-xs text-blue-600 mt-1">{eventsToday} due today</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-primary" />
+              <div className="bg-blue-200 p-3 rounded-full">
+                <CheckCircle className="w-6 h-6 text-blue-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card">
+        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Events today</p>
-                <p className="text-2xl font-bold mt-1">{eventsToday}</p>
+                <p className="text-sm text-orange-600 font-medium">Team Members</p>
+                <p className="text-3xl font-bold text-orange-900 mt-1">{teamMembers}</p>
+                <p className="text-xs text-orange-600 mt-1">{onLeaveToday} on leave</p>
               </div>
-              <Calendar className="w-8 h-8 text-primary" />
+              <div className="bg-orange-200 p-3 rounded-full">
+                <Users className="w-6 h-6 text-orange-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card">
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold mt-1">{pendingLeaves}</p>
+                <p className="text-sm text-purple-600 font-medium">Pending Leaves</p>
+                <p className="text-3xl font-bold text-purple-900 mt-1">{pendingLeaves}</p>
+                <p className="text-xs text-purple-600 mt-1">Need approval</p>
               </div>
-              <AlertCircle className="w-8 h-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-2 border-primary">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Revenue</p>
-                <p className="text-2xl font-bold mt-1 text-primary">Rs.{totalRevenue.toLocaleString()}</p>
+              <div className="bg-purple-200 p-3 rounded-full">
+                <Calendar className="w-6 h-6 text-purple-700" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Grid */}
+      {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column */}
+        {/* Left Column - Charts & Analytics */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Projects Overview */}
+          {/* Revenue & Profit Trend */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Projects Overview</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Revenue & Profit Trend</CardTitle>
+              <Button variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Open</span>
-                  <span className="text-primary font-bold">{projectCounts.open}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Completed</span>
-                  <span className="text-primary font-bold">{projectCounts.completed}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Hold</span>
-                  <span className="text-primary font-bold">{projectCounts.hold}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2 mt-3">
-                  <div
-                    className="bg-primary h-2 rounded-full"
-                    style={{
-                      width: `${(() => {
-                        const total = projectCounts.open + projectCounts.completed + projectCounts.hold;
-                        return total ? Math.round((projectCounts.completed / total) * 100) : 0;
-                      })()}%`,
-                    }}
-                  />
-                </div>
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={revenueData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="profit" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Invoice Overview */}
+          {/* Project Status Overview */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Invoice Overview</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Project Status Overview</CardTitle>
+              <Button variant="outline" size="sm">
+                <Eye className="w-4 h-4 mr-2" />
+                View All
+              </Button>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={invoiceData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value">
-                    {invoiceData.map((entry, index) => (
+                  <Pie
+                    data={projectStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    dataKey="value"
+                  >
+                    {projectStatusData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
-                {invoiceData.map((item) => (
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                {projectStatusData.map((item) => (
                   <div key={item.name} className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span>{item.name}: {item.value}</span>
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm">{item.name}: {item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Team Performance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Team Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {teamPerformanceData.map((team, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm">{team.name}</h4>
+                      <span className="text-sm text-muted-foreground">{team.completed}/{team.total} tasks</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${(team.completed / team.total) * 100}%`,
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -286,7 +390,7 @@ export default function Dashboard() {
           {/* Income vs Expenses */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Income vs Expenses</CardTitle>
+              <CardTitle className="text-lg">Income vs Expenses</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
@@ -295,143 +399,143 @@ export default function Dashboard() {
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip />
-                  <Line type="monotone" dataKey="income" stroke="#10b981" />
-                  <Line type="monotone" dataKey="expense" stroke="#ef4444" />
+                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} />
+                  <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* All Tasks Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">All Tasks Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: "To do", value: tasksPie.todo, color: "#f59e0b" },
-                      { name: "In progress", value: tasksPie.inProgress, color: "#3b82f6" },
-                      { name: "Completed", value: tasksPie.completed, color: "#10b981" },
-                      { name: "Expired", value: tasksPie.expired, color: "#ef4444" },
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    dataKey="value"
-                  >
-                    {[
-                      { color: "#f59e0b" },
-                      { color: "#3b82f6" },
-                      { color: "#10b981" },
-                      { color: "#ef4444" },
-                    ].map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Team Members Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Team Members Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Team members</p>
-                  <p className="text-3xl font-bold text-primary">{teamMembers}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">On leave today</p>
-                  <p className="text-3xl font-bold text-primary">{onLeaveToday}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Project Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Project Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[
-                  { name: "HealthSpire", task: "Task #12: Advance account setup", date: "2025-01-15" },
-                  { name: "HealthSpire", task: "Project: Commerce Digitizing system", date: "2025-01-15" },
-                  { name: "HealthSpire", task: "Project: News & Notification Template", date: "2025-01-15" },
-                  { name: "HealthSpire", task: "Task #31: Lender Website", date: "2025-01-15" },
-                  { name: "HealthSpire", task: "Task #30: Qorinte purchase", date: "2025-01-15" },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-2 pb-2 border-b last:border-b-0">
-                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-primary">{item.name}</p>
-                      <p className="text-xs text-foreground">{item.task}</p>
-                      <p className="text-xs text-muted-foreground">{item.date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Right Column */}
         <div className="space-y-6">
-          {/* Ticket Status */}
+          {/* Quick Actions */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Ticket Status</CardTitle>
+              <CardTitle className="text-lg">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button className="w-full justify-start" variant="outline">
+                <Plus className="w-4 h-4 mr-2" />
+                New Project
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <Users className="w-4 h-4 mr-2" />
+                Add Team Member
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <FileText className="w-4 h-4 mr-2" />
+                Create Invoice
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <Settings className="w-4 h-4 mr-2" />
+                System Settings
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activities */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Recent Activities</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {[
-                  { label: "Open", count: 0 },
-                  { label: "Closed", count: 0 },
-                  { label: "Closed", count: 0 },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="font-medium">{item.label}</span>
-                    <span className="text-primary font-bold">{item.count}</span>
+              <div className="space-y-3">
+                {recentActivities.map((activity, index) => (
+                  <div key={index} className="flex items-start gap-3 p-2 rounded-lg">
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                      activity.type === "success" ? "bg-green-500" :
+                      activity.type === "warning" ? "bg-yellow-500" :
+                      activity.type === "danger" ? "bg-red-500" : "bg-blue-500"
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm">
+                        <span className="font-medium">{activity.action}</span>
+                        <span className="text-muted-foreground"> {activity.detail}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">{activity.time}</p>
+                    </div>
                   </div>
                 ))}
-                <p className="text-xs text-muted-foreground mt-3">New tickets in last 30 days</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Events */}
+          {/* Top Performers */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Events</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Top Performers</CardTitle>
+              <Badge variant="secondary">This Month</Badge>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Calendar className="w-12 h-12 text-muted-foreground mb-2" />
-                <p className="text-xs text-muted-foreground">No events found!</p>
-                <a href="#" className="text-xs text-primary mt-2">View on calendar</a>
+              <div className="space-y-3">
+                {topPerformers.map((performer) => (
+                  <div key={performer.name} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs">{performer.avatar}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">{performer.name}</p>
+                        <p className="text-xs text-muted-foreground">{performer.role}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-1 text-yellow-500">
+                        <Star className="w-3 h-3 fill-yellow-400" />
+                        <span className="text-xs font-medium">{performer.rating}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{performer.tasks} tasks</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Invoice Overview */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Invoice Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie data={invoiceData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="value">
+                    {invoiceData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-1 gap-2 mt-4">
+                {invoiceData.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span>{item.name}</span>
+                    </div>
+                    <span className="font-medium">{item.value}</span>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
 
           {/* Open Projects */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Open Projects</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Open Projects</CardTitle>
+              <Button variant="outline" size="sm">
+                <Eye className="w-4 h-4 mr-2" />
+                View All
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {projectsList.map((project) => (
-                  <div key={project.id} className="text-xs">
+                {projectsList.slice(0, 5).map((project) => (
+                  <div key={project.id} className="text-xs p-2 rounded-lg border">
                     <a href="#" className="text-primary font-medium hover:underline">{project.name}</a>
                     <p className="text-muted-foreground">Estimate: {project.estimate}</p>
                   </div>
@@ -439,66 +543,56 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-
-          {/* To Do (Private) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">To Do (Private)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Input type="text" placeholder="Add to do..." className="text-xs h-8" />
-                  <Button size="sm" className="h-8">Save</Button>
-                </div>
-                <div className="space-y-1 mt-3">
-                  {["To do", "Done", "Doing", "Search"].map((tab, i) => (
-                    <div key={i} className="text-xs text-muted-foreground">{tab}</div>
-                  ))}
-                </div>
-                <div className="text-xs text-muted-foreground mt-3">No record found.</div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Sticky Note (Private) */}
-          <Card className="bg-yellow-100">
-            <CardContent className="p-4">
-              <div className="space-y-1 text-xs">
-                {announcements.map((item, i) => (
-                  <div key={i}>{item}</div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
-      {/* My Tasks */}
+      {/* Tasks Table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">My Tasks</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">Recent Tasks</CardTitle>
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4 mr-2" />
+            View All Tasks
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-2 px-2">ID</th>
-                  <th className="text-left py-2 px-2">Title</th>
-                  <th className="text-left py-2 px-2">Start date</th>
-                  <th className="text-left py-2 px-2">Deadline</th>
-                  <th className="text-left py-2 px-2">Status</th>
+                  <th className="text-left py-3 px-4">ID</th>
+                  <th className="text-left py-3 px-4">Title</th>
+                  <th className="text-left py-3 px-4">Start Date</th>
+                  <th className="text-left py-3 px-4">Deadline</th>
+                  <th className="text-left py-3 px-4">Status</th>
+                  <th className="text-left py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {tasksTable.map((task) => (
+                {tasksTable.slice(0, 5).map((task) => (
                   <tr key={task.id} className="border-b hover:bg-muted/50">
-                    <td className="py-2 px-2">{task.id}</td>
-                    <td className="py-2 px-2 text-primary">{task.title}</td>
-                    <td className="py-2 px-2">{task.startDate}</td>
-                    <td className="py-2 px-2">{task.deadline}</td>
-                    <td className="py-2 px-2">{task.status}</td>
+                    <td className="py-3 px-4">{task.id}</td>
+                    <td className="py-3 px-4 text-primary font-medium">{task.title}</td>
+                    <td className="py-3 px-4">{task.startDate}</td>
+                    <td className="py-3 px-4">{task.deadline}</td>
+                    <td className="py-3 px-4">
+                      <Badge
+                        variant={task.status === "done" ? "default" : 
+                                task.status === "in-progress" ? "secondary" : "outline"}
+                      >
+                        {task.status}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline">
+                          <Eye className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

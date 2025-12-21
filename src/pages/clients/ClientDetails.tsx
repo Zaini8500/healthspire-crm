@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
+import Notes from "../notes/Notes";
+import Files from "../files/Files";
 
 const API_BASE = "http://localhost:5000";
 
@@ -19,8 +21,6 @@ export default function ClientDetails() {
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [notes, setNotes] = useState<any[]>([]);
-  const [files, setFiles] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [estimateRequests, setEstimateRequests] = useState<any[]>([]);
@@ -55,8 +55,7 @@ export default function ClientDetails() {
           setEstimates(await resE.json().catch(() => []));
           // fetch expenses/notes/files using q by client display name (best-effort)
           try { const r1 = await fetch(`${API_BASE}/api/expenses?q=${encodeURIComponent(name)}`); setExpenses(await r1.json().catch(()=>[])); } catch {}
-          try { const r2 = await fetch(`${API_BASE}/api/notes?q=${encodeURIComponent(name)}`); setNotes(await r2.json().catch(()=>[])); } catch {}
-          try { const r3 = await fetch(`${API_BASE}/api/files?q=${encodeURIComponent(name)}`); setFiles(await r3.json().catch(()=>[])); } catch {}
+          // Notes & Files are loaded via embedded modules below
           // fetch modules with clientId filters (precise)
           try { const r = await fetch(`${API_BASE}/api/invoices?clientId=${encodeURIComponent(String(id))}`); setInvoices(await r.json().catch(()=>[])); } catch {}
           try { const r = await fetch(`${API_BASE}/api/payments?clientId=${encodeURIComponent(String(id))}`); setPayments(await r.json().catch(()=>[])); } catch {}
@@ -295,47 +294,11 @@ export default function ClientDetails() {
         </TabsContent>
 
         <TabsContent value="notes">
-          <Card className="p-0 overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Title</TableHead>
-                  <TableHead>Text</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {notes.map((n:any)=> (
-                  <TableRow key={String(n._id)}>
-                    <TableCell className="whitespace-nowrap">{n.title}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{n.text}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+          <Notes clientId={id} />
         </TabsContent>
 
         <TabsContent value="files">
-          <Card className="p-0 overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Name</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Type</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {files.map((f:any)=> (
-                  <TableRow key={String(f._id)}>
-                    <TableCell className="whitespace-nowrap">{f.name}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{f.size || 0}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{f.mime || '-'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+          <Files clientId={id} />
         </TabsContent>
 
         <TabsContent value="expenses">

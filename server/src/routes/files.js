@@ -16,6 +16,8 @@ const storage = multer.diskStorage({
       ? `proj_${req.body.projectId}`
       : req.body.leadId
       ? `lead_${req.body.leadId}`
+      : req.body.clientId
+      ? `client_${req.body.clientId}`
       : req.body.employeeId
       ? `emp_${req.body.employeeId}`
       : "misc";

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authenticate, isAdmin } from "../middleware/auth.js";
 import Attendance from "../models/Attendance.js";
 import Employee from "../models/Employee.js";
 
@@ -17,8 +18,32 @@ const endOfDay = (d = new Date()) => {
 };
 
 // List members with current clock state
-router.get("/members", async (_req, res) => {
+router.get("/members", authenticate, async (req, res) => {
   try {
+    // Staff can only see their own clock status
+    if (req.user.role === 'staff') {
+      const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
+      if (!staffEmployee) return res.status(404).json({ error: "Employee record not found" });
+      
+      const today = { $gte: startOfDay(), $lte: endOfDay() };
+      const todays = await Attendance.find({ date: today }).lean();
+      const open = todays.find((t) => String(t.employeeId) === String(staffEmployee._id) && t.clockIn && !t.clockOut);
+      const name = staffEmployee.name || `${staffEmployee.firstName || ""} ${staffEmployee.lastName || ""}`.trim();
+      const initials = (staffEmployee.initials || name.split(" ").map((w)=>w[0]).join("").slice(0,2)).toUpperCase();
+      const avatar = staffEmployee.avatar || "";
+      
+      return res.json([{
+        employeeId: staffEmployee._id,
+        name,
+        initials,
+        avatar,
+        avatarUrl: avatar ? (String(avatar).startsWith("http") ? avatar : `${res.req.protocol}://${res.req.get("host")}${avatar.startsWith("/") ? "" : "/"}${avatar}`) : "",
+        clockedIn: !!open,
+        startTime: open?.clockIn ? new Date(open.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : undefined,
+      }]);
+    }
+    
+    // Admins can see all members
     const emps = await Employee.find({}).lean();
     const today = { $gte: startOfDay(), $lte: endOfDay() };
     const todays = await Attendance.find({ date: today }).lean();
@@ -26,10 +51,13 @@ router.get("/members", async (_req, res) => {
       const open = todays.find((t) => String(t.employeeId) === String(e._id) && t.clockIn && !t.clockOut);
       const name = e.name || `${e.firstName || ""} ${e.lastName || ""}`.trim();
       const initials = (e.initials || name.split(" ").map((w)=>w[0]).join("").slice(0,2)).toUpperCase();
+      const avatar = e.avatar || "";
       return {
         employeeId: e._id,
         name,
         initials,
+        avatar,
+        avatarUrl: avatar ? (String(avatar).startsWith("http") ? avatar : `${res.req.protocol}://${res.req.get("host")}${avatar.startsWith("/") ? "" : "/"}${avatar}`) : "",
         clockedIn: !!open,
         startTime: open?.clockIn ? new Date(open.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : undefined,
       };
@@ -41,10 +69,22 @@ router.get("/members", async (_req, res) => {
 });
 
 // Clock in
-router.post("/clock-in", async (req, res) => {
+router.post("/clock-in", authenticate, async (req, res) => {
   try {
     const { employeeId, name } = req.body || {};
     let empId = employeeId;
+    
+    // Staff can only clock in themselves
+    if (req.user.role === 'staff') {
+      const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
+      if (!staffEmployee) return res.status(404).json({ error: "Employee record not found" });
+      empId = staffEmployee._id;
+      // Verify the provided employeeId matches the staff's own ID if provided
+      if (employeeId && String(employeeId) !== String(staffEmployee._id)) {
+        return res.status(403).json({ error: "Can only clock in for yourself" });
+      }
+    }
+    
     if (!empId && name) {
       const emp = await Employee.findOne({ name });
       if (emp) empId = emp._id;
@@ -64,10 +104,22 @@ router.post("/clock-in", async (req, res) => {
 });
 
 // Clock out
-router.post("/clock-out", async (req, res) => {
+router.post("/clock-out", authenticate, async (req, res) => {
   try {
     const { employeeId, name } = req.body || {};
     let empId = employeeId;
+    
+    // Staff can only clock out themselves
+    if (req.user.role === 'staff') {
+      const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
+      if (!staffEmployee) return res.status(404).json({ error: "Employee record not found" });
+      empId = staffEmployee._id;
+      // Verify the provided employeeId matches the staff's own ID if provided
+      if (employeeId && String(employeeId) !== String(staffEmployee._id)) {
+        return res.status(403).json({ error: "Can only clock out for yourself" });
+      }
+    }
+    
     if (!empId && name) {
       const emp = await Employee.findOne({ name });
       if (emp) empId = emp._id;
@@ -87,8 +139,8 @@ router.post("/clock-out", async (req, res) => {
   }
 });
 
-// Manual add
-router.post("/manual", async (req, res) => {
+// Manual add (admin only)
+router.post("/manual", authenticate, isAdmin, async (req, res) => {
   try {
     const { employeeId, name, date, clockIn, clockOut, notes } = req.body || {};
     if (!employeeId && !name) return res.status(400).json({ error: "employeeId or name required" });
@@ -107,11 +159,22 @@ router.post("/manual", async (req, res) => {
 });
 
 // List records (optional filters)
-router.get("/records", async (req, res) => {
+router.get("/records", authenticate, async (req, res) => {
   try {
     const { from, to, employeeId } = req.query;
     const filter = {};
-    if (employeeId) filter.employeeId = employeeId;
+    
+    // Staff can only see their own records
+    if (req.user.role === 'staff') {
+      const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
+      if (!staffEmployee) return res.status(404).json({ error: "Employee record not found" });
+      filter.employeeId = staffEmployee._id;
+      // Ignore provided employeeId for staff
+    } else if (employeeId) {
+      // Admins can filter by employeeId
+      filter.employeeId = employeeId;
+    }
+    
     if (from || to) filter.date = { $gte: from ? new Date(String(from)) : startOfDay(), $lte: to ? new Date(String(to)) : endOfDay() };
     const items = await Attendance.find(filter).sort({ date: -1 }).lean();
     res.json(items);

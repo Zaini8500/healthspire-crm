@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Client from "../models/Client.js";
+import Employee from "../models/Employee.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
@@ -31,7 +32,7 @@ router.post("/admin/login", async (req, res) => {
 
     await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
     const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, permissions: user.permissions || [] } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -60,7 +61,97 @@ router.post("/admin/login1", async (req, res) => {
 
     await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
     const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, permissions: user.permissions || [] } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Team login (admin + staff)
+router.post("/team/login", async (req, res) => {
+  try {
+    const { identifier, password } = req.body || {};
+    if (!identifier || !password) return res.status(400).json({ error: "Missing credentials" });
+
+    const identifierLc = String(identifier).toLowerCase().trim();
+    const query = { $or: [{ email: identifierLc }, { username: identifier }] };
+    let user = await User.findOne(query).lean(false);
+
+    // If user doesn't exist yet, allow employee login by email and auto-create staff User.
+    if (!user) {
+      const emp = identifierLc ? await Employee.findOne({ email: identifierLc }).lean() : null;
+      if (!emp || emp.disableLogin || emp.markAsInactive) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const ok = String(emp.password || "") === String(password);
+      if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
+      user = await User.findOneAndUpdate(
+        { email: identifierLc },
+        {
+          $setOnInsert: {
+            email: identifierLc,
+            username: identifierLc,
+            role: "staff",
+            status: "active",
+            createdBy: "employee-login",
+          },
+          $set: {
+            name: emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+            avatar: emp.avatar || "",
+          },
+        },
+        { new: true, upsert: true }
+      ).lean(false);
+    }
+
+    if (user.role !== "admin" && user.role !== "staff") return res.status(403).json({ error: "Unauthorized role" });
+    if (user.status !== "active") return res.status(403).json({ error: "Inactive user" });
+
+    // Admin uses hashed password; staff uses Employee.password
+    let ok = false;
+    if (user.role === "admin") {
+      ok = await bcrypt.compare(password, user.passwordHash);
+    } else {
+      const email = String(user.email || "").toLowerCase().trim();
+      const emp = email ? await Employee.findOne({ email }).lean() : null;
+      ok = Boolean(emp && !emp.disableLogin && !emp.markAsInactive && String(emp.password || "") === String(password));
+    }
+
+    if (!ok) {
+      user.failedLogins = (user.failedLogins || 0) + 1;
+      await user.save().catch(() => {});
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
+    const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name || "", permissions: user.permissions || [] } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Client login
+router.post("/client/login", async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: "Missing credentials" });
+
+    const emailLc = String(email).toLowerCase().trim();
+    const user = await User.findOne({ email: emailLc, role: "client" }).lean(false);
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (user.status !== "active") return res.status(403).json({ error: "Inactive user" });
+    if (!user.passwordHash) return res.status(401).json({ error: "Account not ready" });
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
+    await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
+    const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+
+    const client = user.clientId ? await Client.findById(user.clientId).lean() : null;
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name || "", permissions: user.permissions || [] }, client });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -232,9 +232,59 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
+const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?: string } | null => {
+  const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState<string[]>([]);
+
+  const role = getStoredAuthUser()?.role || "admin";
+
+  const isAllowed = (item: NavItem) => {
+    if (role === "admin") return true;
+
+    if (role === "client") {
+      const allowedTop = new Set([
+        "Dashboard",
+        "Messages",
+        "Announcements",
+        "Tickets",
+        "Client portal",
+      ]);
+      if (allowedTop.has(item.title)) return true;
+      // Allow explicit portal paths even if the group title changes
+      if (item.href?.startsWith("/client")) return true;
+      return false;
+    }
+
+    // staff
+    const staffTop = new Set([
+      "Dashboard",
+      "CRM",
+      "HRM",
+      "Projects",
+      "Clients",
+      "Tasks",
+      "Messages",
+      "Announcements",
+      "Calendar",
+    ]);
+    if (staffTop.has(item.title)) return true;
+    // Hide admin configuration areas for staff
+    const blockedPrefixes = ["/settings", "/user-management"];
+    if (blockedPrefixes.some((p) => item.href?.startsWith(p))) return false;
+    return false;
+  };
+
+  const visibleNavigation = navigation.filter(isAllowed);
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) =>
@@ -283,7 +333,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin">
         <ul className="space-y-1">
-          {navigation.map((item) => (
+          {visibleNavigation.map((item) => (
             <li key={item.title}>
               {item.children ? (
                 <div>

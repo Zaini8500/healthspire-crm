@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 type Employee = {
   id: number;
@@ -100,6 +101,19 @@ export default function Employees() {
   const [sendLogin, setSendLogin] = useState(true);
   // Departments options loaded from backend
   const [deptOptions, setDeptOptions] = useState<string[]>([]);
+
+  const getCurrentUserRole = () => {
+    try {
+      const userStr = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!userStr) return "admin";
+      const user = JSON.parse(userStr);
+      return user.role || "admin";
+    } catch {
+      return "admin";
+    }
+  };
+
+  const currentUserRole = getCurrentUserRole();
 
   const filteredEmployees = useMemo(() => {
     const s = searchQuery.toLowerCase();
@@ -182,7 +196,7 @@ export default function Employees() {
       }
       await fetch(`${API_BASE}/api/employees/bulk`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ items: importPreview }),
       });
       setOpenImport(false);
@@ -200,7 +214,7 @@ export default function Employees() {
         .filter(Boolean);
       await fetch(`${API_BASE}/api/employees/invite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ emails }),
       });
       setOpenInvite(false);
@@ -263,7 +277,7 @@ export default function Employees() {
 
   const refreshFromAPI = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/employees`, { cache: "no-store" });
+      const res = await fetch(`${API_BASE}/api/employees`, { cache: "no-store", headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Employee[] = (Array.isArray(data) ? data : []).map((d: any, i: number) => {
@@ -305,7 +319,7 @@ export default function Employees() {
     // Try loading from backend; fallback to mock if API not available
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/employees`, { cache: "no-store" });
+        const res = await fetch(`${API_BASE}/api/employees`, { cache: "no-store", headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         if (Array.isArray(data) && data.length) {
@@ -384,7 +398,7 @@ export default function Employees() {
           };
           await fetch(`${API_BASE}/api/employees/${editingDbId}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(payload),
           });
         } catch {}
@@ -425,7 +439,7 @@ export default function Employees() {
         };
         await fetch(`${API_BASE}/api/employees`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify(payload),
         });
       } catch {}
@@ -468,7 +482,7 @@ export default function Employees() {
     setItems((prev) => prev.filter((it) => it.id !== emp.id));
     if (emp.dbId) {
       try {
-        await fetch(`${API_BASE}/api/employees/${emp.dbId}`, { method: "DELETE" });
+        await fetch(`${API_BASE}/api/employees/${emp.dbId}`, { method: "DELETE", headers: getAuthHeaders() });
       } catch {}
       await refreshFromAPI();
     }
@@ -496,58 +510,60 @@ export default function Employees() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={openImport} onOpenChange={setOpenImport}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">Import team members</Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card">
-                <DialogHeader>
-                  <DialogTitle>Import team members</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-3">
-                  <div className="space-y-1">
-                    <Label>Upload CSV</Label>
-                    <Input ref={importFileRef} type="file" accept=".csv" onChange={onImportFileChange} />
-                    <p className="text-xs text-muted-foreground">Headers: name,email,phone,department,role,location,status,joinDate</p>
-                  </div>
-                  {importPreview.length > 0 && (
-                    <div className="text-xs text-muted-foreground">Parsed {importPreview.length} rows</div>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={()=>setOpenImport(false)}>Close</Button>
-                  <Button onClick={saveImport}>Import</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={openInvite} onOpenChange={setOpenInvite}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">Send invitation</Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card">
-                <DialogHeader>
-                  <DialogTitle>Send invitation</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-3">
-                  <div className="space-y-1">
-                    <Label>Emails (comma or newline separated)</Label>
-                    <Textarea rows={6} placeholder="a@company.com, b@company.com" value={inviteList} onChange={(e)=>setInviteList(e.target.value)} />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={()=>setOpenInvite(false)}>Close</Button>
-                  <Button onClick={saveInvite}>Send</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={openAdd} onOpenChange={(o)=>{setOpenAdd(o); if(!o) resetForm();}}>
-              <DialogTrigger asChild>
-                <Button variant="gradient" size="sm"><Plus className="w-4 h-4 mr-2"/>Add member</Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card">
-                <DialogHeader>
-                  <DialogTitle>Add member</DialogTitle>
-                </DialogHeader>
+            {currentUserRole === "admin" && (
+              <>
+                <Dialog open={openImport} onOpenChange={setOpenImport}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">Import team members</Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-card">
+                    <DialogHeader>
+                      <DialogTitle>Import team members</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-3">
+                      <div className="space-y-1">
+                        <Label>Upload CSV</Label>
+                        <Input ref={importFileRef} type="file" accept=".csv" onChange={onImportFileChange} />
+                        <p className="text-xs text-muted-foreground">Headers: name,email,phone,department,role,location,status,joinDate</p>
+                      </div>
+                      {importPreview.length > 0 && (
+                        <div className="text-xs text-muted-foreground">Parsed {importPreview.length} rows</div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={()=>setOpenImport(false)}>Close</Button>
+                      <Button onClick={saveImport}>Import</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                <Dialog open={openInvite} onOpenChange={setOpenInvite}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">Send invitation</Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-card">
+                    <DialogHeader>
+                      <DialogTitle>Send invitation</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-3">
+                      <div className="space-y-1">
+                        <Label>Emails (comma or newline separated)</Label>
+                        <Textarea rows={6} placeholder="a@company.com, b@company.com" value={inviteList} onChange={(e)=>setInviteList(e.target.value)} />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={()=>setOpenInvite(false)}>Close</Button>
+                      <Button onClick={saveInvite}>Send</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                <Dialog open={openAdd} onOpenChange={(o)=>{setOpenAdd(o); if(!o) resetForm();}}>
+                  <DialogTrigger asChild>
+                    <Button variant="gradient" size="sm"><Plus className="w-4 h-4 mr-2"/>Add member</Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-card">
+                    <DialogHeader>
+                      <DialogTitle>Add member</DialogTitle>
+                    </DialogHeader>
                 {/* Stepper */}
                 <div className="mb-4">
                   <div className="flex items-center gap-6 text-sm">
@@ -630,8 +646,10 @@ export default function Employees() {
                   {step<3 && <Button variant="gradient" onClick={nextStep}>Next</Button>}
                   {step===3 && <Button onClick={saveMember}>Save</Button>}
                 </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -782,14 +800,18 @@ export default function Employees() {
                 }}>
                   View Profile
                 </Button>
-                <Button variant="outline" size="sm" onClick={()=>{
-                  const fullIndex = items.findIndex(e=>e.id===employee.id);
-                  startEdit(employee, fullIndex);
-                }}>Edit</Button>
-                <Button variant="destructive" size="sm" onClick={()=>{
-                  const fullIndex = items.findIndex(e=>e.id===employee.id);
-                  deleteEmployee(employee, fullIndex);
-                }}>Delete</Button>
+                {currentUserRole === "admin" && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={()=>{
+                      const fullIndex = items.findIndex(e=>e.id===employee.id);
+                      startEdit(employee, fullIndex);
+                    }}>Edit</Button>
+                    <Button variant="destructive" size="sm" onClick={()=>{
+                      const fullIndex = items.findIndex(e=>e.id===employee.id);
+                      deleteEmployee(employee, fullIndex);
+                    }}>Delete</Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

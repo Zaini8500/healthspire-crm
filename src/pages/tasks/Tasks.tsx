@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -163,7 +164,7 @@ export default function Tasks() {
     try {
       const r = await fetch(`${API_BASE}/api/task-labels`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name, color: manageLabelColor }),
       });
       if (r.ok) {
@@ -181,7 +182,7 @@ export default function Tasks() {
   const deleteLabel = async (id: string) => {
     if (!confirm("Delete this label?")) return;
     try {
-      const r = await fetch(`${API_BASE}/api/task-labels/${id}`, { method: "DELETE" });
+      const r = await fetch(`${API_BASE}/api/task-labels/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (r.ok) {
         setLabels((p) => p.filter((x) => x._id !== id));
         toast.success("Label deleted");
@@ -201,7 +202,11 @@ export default function Tasks() {
         const fd = new FormData();
         fd.append("file", f);
         fd.append("name", f.name);
-        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+        const r = await fetch(`${API_BASE}/api/files`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: fd,
+        });
         if (r.ok) uploaded += 1;
       }
       return uploaded;
@@ -242,7 +247,7 @@ export default function Tasks() {
       const url = editingTaskId ? `${API_BASE}/api/tasks/${editingTaskId}` : `${API_BASE}/api/tasks`;
       const r = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       if (r.ok) {
@@ -299,7 +304,7 @@ export default function Tasks() {
       if ((tagValue || "").trim()) params.set("tag", tagValue.trim());
       if ((deadlineFromValue || "").trim()) params.set("deadlineFrom", deadlineFromValue.trim());
       if ((deadlineToValue || "").trim()) params.set("deadlineTo", deadlineToValue.trim());
-      const r = await fetch(`${API_BASE}/api/tasks?${params.toString()}`);
+      const r = await fetch(`${API_BASE}/api/tasks?${params.toString()}`, { headers: getAuthHeaders() });
       if (r.ok) {
         const d = await r.json();
         setItems(Array.isArray(d) ? d : []);
@@ -324,7 +329,7 @@ export default function Tasks() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/employees`);
+        const r = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
         if (r.ok) {
           const d = await r.json();
           setEmployees(Array.isArray(d) ? d : []);
@@ -336,7 +341,7 @@ export default function Tasks() {
 
   const loadLabels = async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/task-labels`);
+      const r = await fetch(`${API_BASE}/api/task-labels`, { headers: getAuthHeaders() });
       if (r.ok) {
         const d = await r.json();
         setLabels(Array.isArray(d) ? d : []);
@@ -352,7 +357,7 @@ export default function Tasks() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/leads`);
+        const r = await fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() });
         if (r.ok) {
           const d = (await r.json()) as LeadDoc[];
           const m = new Map<string, string>();
@@ -403,7 +408,7 @@ export default function Tasks() {
     try {
       const r = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: nextStatus }),
       });
       if (r.ok) {
@@ -491,7 +496,7 @@ export default function Tasks() {
     setDepBlocking("");
     if (!t?._id) return;
     setTaskInfoLoading(true);
-    fetch(`${API_BASE}/api/tasks/${t._id}`)
+    fetch(`${API_BASE}/api/tasks/${t._id}`, { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?._id) setTaskInfo(d);
@@ -504,11 +509,12 @@ export default function Tasks() {
     try {
       const r = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(patch),
       });
       if (r.ok) {
         const updated = await r.json();
+        setTaskInfo(updated);
         setItems((p) => p.map((x) => (x._id === taskId ? updated : x)));
         setTaskInfo((p) => (p?._id === taskId ? updated : p));
         return { ok: true as const, updated };
@@ -542,7 +548,11 @@ export default function Tasks() {
         const fd = new FormData();
         fd.append("file", f);
         fd.append("name", f.name);
-        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+        const r = await fetch(`${API_BASE}/api/files`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: fd,
+        });
         if (r.ok) uploaded += 1;
       }
       return uploaded;
@@ -569,7 +579,7 @@ export default function Tasks() {
     try {
       const r = await fetch(`${API_BASE}/api/tasks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       if (r.ok) {
@@ -601,7 +611,7 @@ export default function Tasks() {
   const handleDelete = async (t: TaskDoc) => {
     if (!confirm("Delete this task?")) return;
     try {
-      const r = await fetch(`${API_BASE}/api/tasks/${t._id}`, { method: "DELETE" });
+      const r = await fetch(`${API_BASE}/api/tasks/${t._id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (r.ok) {
         setItems((prev) => prev.filter((x) => x._id !== t._id));
         toast.success("Task deleted");

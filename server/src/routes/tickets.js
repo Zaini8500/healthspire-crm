@@ -1,18 +1,8 @@
 import { Router } from "express";
-import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
+import Counter from "../models/Counter.js";
 
 const router = Router();
-
-const CounterSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, unique: true },
-    seq: { type: Number, default: 0 },
-  },
-  { timestamps: true }
-);
-
-const Counter = mongoose.models.Counter || mongoose.model("Counter", CounterSchema);
 
 const ensureCounterAtLeast = async (minSeq) => {
   const n = Number(minSeq || 0) || 0;

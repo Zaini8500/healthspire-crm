@@ -192,6 +192,7 @@ export default function Clients() {
   const saveLabels = (list: Array<{ name: string; color: string }>) => {
     setLabels(list);
     try { localStorage.setItem("client_labels", JSON.stringify(list)); } catch {}
+    try { window.dispatchEvent(new Event("client_labels_updated")); } catch {}
   };
 
   const handleImported = (created: any[]) => {
@@ -765,6 +766,7 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
   const [company, setCompany] = useState("");
   const [person, setPerson] = useState("");
   const [owner, setOwner] = useState("");
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string }>>([]);
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -778,10 +780,47 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
   const [clientGroupsText, setClientGroupsText] = useState("");
   const [currency, setCurrency] = useState("");
   const [currencySymbol, setCurrencySymbol] = useState("");
-  const [labelsText, setLabelsText] = useState("");
+  const [labels, setLabels] = useState<Array<{ name: string; color: string }>>([]);
+  const [selectedLabel, setSelectedLabel] = useState<string>("__none__");
   const [disableOnlinePayment, setDisableOnlinePayment] = useState(false);
 
   // Owner is a free text company owner; no fetching of employees
+
+  const loadLabels = () => {
+    try {
+      const raw = localStorage.getItem("client_labels");
+      setLabels(raw ? (JSON.parse(raw) || []) : []);
+    } catch {
+      setLabels([]);
+    }
+  };
+
+  useEffect(() => {
+    loadLabels();
+
+    const onLabelsUpdated = () => loadLabels();
+    window.addEventListener("client_labels_updated", onLabelsUpdated);
+
+    // Load employees for account manager dropdown
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/employees`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => []);
+        const mapped = (Array.isArray(data) ? data : []).map((e: any) => ({
+          id: String(e._id || e.id || ""),
+          name: String(e.name || [e.firstName, e.lastName].filter(Boolean).join(" ") || "").trim(),
+        })).filter((e: any) => e.id && e.name);
+        setEmployees(mapped);
+      } catch {
+        setEmployees([]);
+      }
+    })();
+
+    return () => {
+      window.removeEventListener("client_labels_updated", onLabelsUpdated);
+    };
+  }, []);
 
   const buildPayload = () => ({
     company: type === "org" ? (company || undefined) : undefined,
@@ -800,7 +839,7 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
     clientGroups: clientGroupsText.split(",").map(s=>s.trim()).filter(Boolean),
     currency: currency || undefined,
     currencySymbol: currencySymbol || undefined,
-    labels: labelsText.split(",").map(s=>s.trim()).filter(Boolean),
+    labels: selectedLabel && selectedLabel !== "__none__" ? [selectedLabel] : [],
     disableOnlinePayment,
   });
   const save = (close = true) => {
@@ -837,7 +876,25 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
               <TooltipProvider><Tooltip><TooltipTrigger asChild><HelpCircle className="w-3.5 h-3.5 text-muted-foreground" /></TooltipTrigger><TooltipContent><div className="max-w-xs text-xs">The account manager responsible for this client</div></TooltipContent></Tooltip></TooltipProvider>
             </div>
           </div>
-          <div className="sm:col-span-9"><Input placeholder="HealthSpire" value={owner} onChange={(e)=>setOwner(e.target.value)} /></div>
+          <div className="sm:col-span-9">
+            <Select value={owner} onValueChange={(v)=>setOwner(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.length ? (
+                  employees.map((e) => (
+                    <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="" disabled>No employees found</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <div className="mt-2">
+              <Input placeholder="Or type owner name" value={owner} onChange={(e)=>setOwner(e.target.value)} />
+            </div>
+          </div>
 
           <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Address</div>
           <div className="sm:col-span-9"><Textarea placeholder="Address" value={address} onChange={(e)=>setAddress(e.target.value)} /></div>
@@ -876,7 +933,19 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
           <div className="sm:col-span-9"><Input placeholder="Keep it blank to use the default (Rs.)" value={currencySymbol} onChange={(e)=>setCurrencySymbol(e.target.value)} /></div>
 
           <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Labels</div>
-          <div className="sm:col-span-9"><Input placeholder="Labels" value={labelsText} onChange={(e)=>setLabelsText(e.target.value)} /></div>
+          <div className="sm:col-span-9">
+            <Select value={selectedLabel} onValueChange={(v)=>setSelectedLabel(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="- Label -" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {labels.map((l) => (
+                  <SelectItem key={l.name} value={l.name}>{l.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">
             <div className="inline-flex items-center gap-1">Disable online payment

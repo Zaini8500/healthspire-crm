@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -131,6 +132,7 @@ export default function EmployeeProfile() {
       formData.append("avatar", file);
       const res = await fetch(`${API_BASE}/api/employees/${dbId}/avatar`, {
         method: "POST",
+        headers: { Authorization: getAuthHeaders().Authorization },
         body: formData,
       });
       if (res.ok) {
@@ -149,7 +151,7 @@ export default function EmployeeProfile() {
       if (!dbId) return;
       const res = await fetch(`${API_BASE}/api/employees/${dbId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(updates),
       });
       if (res.ok) {
@@ -163,7 +165,7 @@ export default function EmployeeProfile() {
     (async () => {
       try {
         if (!emp && dbId) {
-          const res = await fetch(`${API_BASE}/api/employees/${dbId}`);
+          const res = await fetch(`${API_BASE}/api/employees/${dbId}`, { headers: getAuthHeaders() });
           if (res.ok) {
             const d = await res.json();
             const name: string = d.name || `${d.firstName || ""} ${d.lastName || ""}`.trim() || `Employee`;
@@ -228,7 +230,7 @@ export default function EmployeeProfile() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/departments?active=1`, { cache: "no-store" });
+        const res = await fetch(`${API_BASE}/api/departments?active=1`, { cache: "no-store", headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const names = (Array.isArray(data) ? data : []).map((d: any) => String(d.name)).filter(Boolean);
@@ -246,7 +248,7 @@ export default function EmployeeProfile() {
         params.set("employeeId", dbId);
         if (fromDate) params.set("from", fromDate);
         if (toDate) params.set("to", toDate);
-        const res = await fetch(`${API_BASE}/api/attendance/records?${params.toString()}`);
+        const res = await fetch(`${API_BASE}/api/attendance/records?${params.toString()}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setRecords(Array.isArray(data) ? data : []);
@@ -260,7 +262,7 @@ export default function EmployeeProfile() {
       try {
         const n = emp?.name || `${firstName} ${lastName}`.trim();
         if (!n) return;
-        const res = await fetch(`${API_BASE}/api/leaves?q=${encodeURIComponent(n)}`);
+        const res = await fetch(`${API_BASE}/api/leaves?q=${encodeURIComponent(n)}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setLeaves(Array.isArray(data) ? data.filter((l:any)=> (l.name||"").toLowerCase().includes(n.toLowerCase())) : []);
@@ -274,7 +276,7 @@ export default function EmployeeProfile() {
       try {
         if (!dbId) { setFileItems([]); return; }
         const q = fileSearch ? `&q=${encodeURIComponent(fileSearch)}` : "";
-        const res = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`);
+        const res = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setFileItems(Array.isArray(data) ? data : []);
@@ -288,7 +290,7 @@ export default function EmployeeProfile() {
       try {
         if (!dbId) { setNoteItems([]); return; }
         const q = noteSearch ? `&q=${encodeURIComponent(noteSearch)}` : "";
-        const res = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`);
+        const res = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setNoteItems(Array.isArray(data) ? data : []);
@@ -302,7 +304,7 @@ export default function EmployeeProfile() {
       try {
         if (!dbId) { setProjectItems([]); return; }
         const q = projectSearch ? `&q=${encodeURIComponent(projectSearch)}` : "";
-        const res = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`);
+        const res = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setProjectItems(Array.isArray(data) ? data : []);
@@ -316,7 +318,7 @@ export default function EmployeeProfile() {
       try {
         if (!dbId) { setExpenseItems([]); return; }
         const q = expenseSearch ? `&q=${encodeURIComponent(expenseSearch)}` : "";
-        const res = await fetch(`${API_BASE}/api/expenses?employeeId=${dbId}${q}`);
+        const res = await fetch(`${API_BASE}/api/expenses?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setExpenseItems(Array.isArray(data) ? data : []);
@@ -325,206 +327,50 @@ export default function EmployeeProfile() {
     })();
   }, [dbId, expenseSearch]);
 
-  const saveJobInfo = async () => {
-    try {
-      if (!dbId) return;
-      const payload: any = {
-        role: jobTitle,
-        salary: salary ? Number(salary) : undefined,
-        salaryTerm: salaryTerm || undefined,
-        joinDate: dateHire ? new Date(dateHire) : undefined,
-        department: departmentVal || undefined,
-        status: statusVal || undefined,
-        location: locationVal || undefined,
-      };
-      const r = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (r.ok) {
-        window.dispatchEvent(new Event("employeeUpdated"));
-        toast.success("Job info saved");
-      }
-    } catch {}
-  };
-
-  const saveGeneral = async () => {
-    try {
-      if (!dbId) return;
-      const payload: any = {
-        firstName,
-        lastName,
-        mailingAddress,
-        alternativeAddress,
-        phone,
-        alternativePhone: altPhone,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        sick,
-        gender,
-      };
-      const r = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (r.ok) { window.dispatchEvent(new Event("employeeUpdated")); toast.success("General info saved"); }
-    } catch {}
-  };
-
-  const saveSocial = async () => {
-    try {
-      if (!dbId) return;
-      const r = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ socialLinks }),
-      });
-      if (r.ok) { window.dispatchEvent(new Event("employeeUpdated")); toast.success("Social links saved"); }
-    } catch {}
-  };
-
-  const saveAccount = async () => {
-    try {
-      if (!dbId) return;
-      const payload: any = {
-        email: accountEmail,
-        role: accountRole,
-        disableLogin,
-        markAsInactive,
-      };
-      if (password) payload.password = password;
-      const r = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (r.ok) { window.dispatchEvent(new Event("employeeUpdated")); toast.success("Account settings saved"); }
-    } catch {}
-  };
-
-  const onFileUploadPick: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
-    try {
-      if (!dbId) return;
-      const f = e.target.files?.[0];
-      if (!f) return;
-      const form = new FormData();
-      form.append("file", f);
-      form.append("employeeId", dbId);
-      form.append("name", f.name);
-      const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: form });
-      if (res.ok) {
-        setFileOpen(false);
-        const item = await res.json().catch(()=>null);
-        setFileItems((prev)=> [item, ...prev]);
-        toast.success("File uploaded");
-      }
-      if (fileUploadRef.current) fileUploadRef.current.value = "";
-    } catch {}
-  };
-
-  const deleteFile = async (id: string) => {
-    try {
-      await fetch(`${API_BASE}/api/files/${id}`, { method: "DELETE" });
-      setFileItems((prev)=> prev.filter((x:any)=> x._id !== id));
-      toast.success("File removed");
-    } catch {}
-  };
-
-  const saveNote = async () => {
-    try {
-      if (!dbId || !noteForm.title.trim()) return;
-      const payload = { employeeId: dbId, title: noteForm.title.trim(), text: noteForm.text, private: true } as any;
-      const res = await fetch(`${API_BASE}/api/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const item = await res.json();
-        setNoteItems((prev)=> [item, ...prev]);
-        setNoteOpen(false);
-        setNoteForm({ title: "", text: "" });
-        toast.success("Note added");
-      }
-    } catch {}
-  };
-
-  const deleteNote = async (id: string) => {
-    try {
-      await fetch(`${API_BASE}/api/notes/${id}`, { method: "DELETE" });
-      setNoteItems((prev)=> prev.filter((x:any)=> x._id !== id));
-      toast.success("Note removed");
-    } catch {}
-  };
-
-  const saveProject = async () => {
-    try {
-      if (!dbId || !projectForm.title.trim()) return;
-      const payload: any = {
-        employeeId: dbId,
-        title: projectForm.title.trim(),
-        client: projectForm.client,
-        price: projectForm.price ? Number(projectForm.price) : 0,
-        start: projectForm.start ? new Date(projectForm.start) : undefined,
-        deadline: projectForm.deadline ? new Date(projectForm.deadline) : undefined,
-        status: projectForm.status || "Open",
-      };
-      const res = await fetch(`${API_BASE}/api/projects`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const item = await res.json();
-        setProjectItems((prev)=> [item, ...prev]);
-        setProjectOpen(false);
-        setProjectForm({ title: "", client: "", price: "", start: "", deadline: "", status: "Open" });
-        toast.success("Project added");
-      }
-    } catch {}
-  };
-
-  const deleteProject = async (id: string) => {
-    try {
-      await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
-      setProjectItems((prev)=> prev.filter((x:any)=> x._id !== id));
-      toast.success("Project removed");
-    } catch {}
-  };
-
   const saveExpense = async () => {
     try {
-      if (!dbId || !expenseForm.title.trim()) return;
-      const payload: any = {
+      if (!dbId) return;
+      const payload = {
         employeeId: dbId,
         date: expenseForm.date ? new Date(expenseForm.date) : undefined,
         category: expenseForm.category,
-        title: expenseForm.title.trim(),
+        title: expenseForm.title,
         description: expenseForm.description,
         amount: expenseForm.amount ? Number(expenseForm.amount) : 0,
         tax: expenseForm.tax ? Number(expenseForm.tax) : 0,
         tax2: expenseForm.tax2 ? Number(expenseForm.tax2) : 0,
       };
+
       const res = await fetch(`${API_BASE}/api/expenses`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
+
       if (res.ok) {
-        const item = await res.json();
-        setExpenseItems((prev)=> [item, ...prev]);
         setExpenseOpen(false);
         setExpenseForm({ date: "", category: "", title: "", description: "", amount: "", tax: "", tax2: "" });
         toast.success("Expense added");
+        const q = expenseSearch ? `&q=${encodeURIComponent(expenseSearch)}` : "";
+        const r2 = await fetch(`${API_BASE}/api/expenses?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setExpenseItems(Array.isArray(d2) ? d2 : []);
+        }
       }
     } catch {}
   };
 
   const deleteExpense = async (id: string) => {
     try {
-      await fetch(`${API_BASE}/api/expenses/${id}`, { method: "DELETE" });
-      setExpenseItems((prev)=> prev.filter((x:any)=> x._id !== id));
+      if (!dbId) return;
+      await fetch(`${API_BASE}/api/expenses/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      const q = expenseSearch ? `&q=${encodeURIComponent(expenseSearch)}` : "";
+      const r2 = await fetch(`${API_BASE}/api/expenses?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setExpenseItems(Array.isArray(d2) ? d2 : []);
+      }
       toast.success("Expense removed");
     } catch {}
   };

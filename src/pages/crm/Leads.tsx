@@ -894,7 +894,7 @@ export default function Leads() {
         firstName: makeClientForm.firstName,
         lastName: makeClientForm.lastName,
         email: makeClientForm.email,
-        phone: makeClientForm.contactPhone || makeClientForm.phone,
+        contactPhone: makeClientForm.contactPhone || makeClientForm.phone,
         skype: makeClientForm.skype,
         jobTitle: makeClientForm.jobTitle,
         gender: makeClientForm.gender,

@@ -9,8 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Search, Plus } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useNavigate } from "react-router-dom";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 export default function Leave() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("pending");
   const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState("10");
@@ -30,12 +34,77 @@ export default function Leave() {
     approver?: string;
   };
 
-  const API_BASE = "http://localhost:5000";
+  const API_BASE = (import.meta as any)?.env?.VITE_API_BASE || "http://localhost:5000";
   const [leaves, setLeaves] = useState<LeaveItem[]>([]);
+
+  // Get current user role to determine UI permissions
+  const getCurrentUserRole = () => {
+    try {
+      const userStr = localStorage.getItem('auth_user') || sessionStorage.getItem('auth_user');
+      if (!userStr) return 'admin'; // Default to admin for safety
+      const user = JSON.parse(userStr);
+      return user.role || 'admin';
+    } catch {
+      return 'admin'; // Default to admin for safety
+    }
+  };
+
+  const currentUserRole = getCurrentUserRole();
+
+  type EmployeeOption = {
+    _id: string;
+    name: string;
+    initials: string;
+    avatar?: string;
+  };
+
+  const [empQuery, setEmpQuery] = useState("");
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+
+  const toAbsoluteAvatar = (v?: string) => {
+    if (!v) return "";
+    const s = String(v);
+    if (!s) return "";
+    if (s.startsWith("http://") || s.startsWith("https://")) return s;
+    return `${API_BASE}${s.startsWith("/") ? "" : "/"}${s}`;
+  };
+
+  const initialsFrom = (name?: string) => {
+    const s = String(name || "").trim();
+    if (!s) return "U";
+    return s
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join("")
+      .toUpperCase();
+  };
+
+  const loadEmployees = async (q?: string) => {
+    try {
+      const url = `${API_BASE}/api/employees${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => []);
+      const mapped: EmployeeOption[] = (Array.isArray(data) ? data : [])
+        .map((e: any) => {
+          const name = e.name || `${e.firstName || ""} ${e.lastName || ""}`.trim();
+          return {
+            _id: String(e._id || ""),
+            name,
+            initials: (e.initials || initialsFrom(name)).toUpperCase(),
+            avatar: e.avatar || "",
+          };
+        })
+        .filter((e: EmployeeOption) => Boolean(e._id) && Boolean(e.name));
+      setEmployees(mapped);
+    } catch {}
+  };
 
   const refresh = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/leaves`);
+      const res = await fetch(`${API_BASE}/api/leaves`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       const mapped: LeaveItem[] = (Array.isArray(data) ? data : []).map((d: any) => ({
@@ -53,7 +122,19 @@ export default function Leave() {
     } catch {}
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    loadEmployees("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (openApply || openAssign) {
+      setEmpQuery("");
+      loadEmployees("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openApply, openAssign]);
 
   const filtered = useMemo(() => {
     const s = query.toLowerCase();
@@ -72,10 +153,12 @@ export default function Leave() {
   const [applyFrom, setApplyFrom] = useState("");
   const [applyTo, setApplyTo] = useState("");
   const [applyReason, setApplyReason] = useState("");
-  const [applyName, setApplyName] = useState("");
+  const [applyEmployeeId, setApplyEmployeeId] = useState<string>("");
+  const [applyEmployeeName, setApplyEmployeeName] = useState<string>("");
 
   // Assign leave form state
-  const [assignName, setAssignName] = useState("");
+  const [assignEmployeeId, setAssignEmployeeId] = useState<string>("");
+  const [assignEmployeeName, setAssignEmployeeName] = useState<string>("");
   const [assignType, setAssignType] = useState("casual");
   const [assignFrom, setAssignFrom] = useState("");
   const [assignTo, setAssignTo] = useState("");
@@ -111,11 +194,12 @@ export default function Leave() {
 
   const applyLeave = async () => {
     try {
+      if (currentUserRole === "admin" && !applyEmployeeId) { toast.error("Please select employee"); return; }
       if (!applyFrom || !applyTo) { toast.error("Please select from and to dates"); return; }
       const res = await fetch(`${API_BASE}/api/leaves`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: applyName, type: applyType, from: new Date(applyFrom), to: new Date(applyTo), reason: applyReason, status: "pending" })
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ employeeId: applyEmployeeId || undefined, name: applyEmployeeName || undefined, type: applyType, from: new Date(applyFrom), to: new Date(applyTo), reason: applyReason, status: "pending" })
       });
       if (!res.ok) {
         const e = await res.json().catch(()=>null);
@@ -123,7 +207,7 @@ export default function Leave() {
         return;
       }
       setOpenApply(false);
-      setApplyName(""); setApplyType("casual"); setApplyFrom(""); setApplyTo(""); setApplyReason("");
+      setApplyEmployeeId(""); setApplyEmployeeName(""); setApplyType("casual"); setApplyFrom(""); setApplyTo(""); setApplyReason("");
       await refresh();
       toast.success("Leave application submitted");
     } catch {}
@@ -131,11 +215,12 @@ export default function Leave() {
 
   const assignLeave = async () => {
     try {
+      if (!assignEmployeeId) { toast.error("Please select employee"); return; }
       if (!assignFrom || !assignTo) { toast.error("Please select from and to dates"); return; }
       const res = await fetch(`${API_BASE}/api/leaves`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: assignName, type: assignType, from: new Date(assignFrom), to: new Date(assignTo), status: "approved", reason: "" })
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ employeeId: assignEmployeeId, name: assignEmployeeName, type: assignType, from: new Date(assignFrom), to: new Date(assignTo), status: "approved", reason: "" })
       });
       if (!res.ok) {
         const e = await res.json().catch(()=>null);
@@ -143,7 +228,7 @@ export default function Leave() {
         return;
       }
       setOpenAssign(false);
-      setAssignName(""); setAssignType("casual"); setAssignFrom(""); setAssignTo("");
+      setAssignEmployeeId(""); setAssignEmployeeName(""); setAssignType("casual"); setAssignFrom(""); setAssignTo("");
       await refresh();
       toast.success("Leave assigned");
     } catch {}
@@ -151,7 +236,7 @@ export default function Leave() {
 
   const updateStatus = async (id: string, status: "approved" | "rejected") => {
     try {
-      await fetch(`${API_BASE}/api/leaves/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      await fetch(`${API_BASE}/api/leaves/${id}`, { method: "PUT", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ status }) });
       await refresh();
     } catch {}
   };
@@ -161,21 +246,23 @@ export default function Leave() {
       <div className="flex items-center justify-between">
         <h1 className="text-sm text-muted-foreground">Leave</h1>
         <div className="flex items-center gap-2">
-          <Dialog open={openImport} onOpenChange={setOpenImport}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">Import leaves</Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card">
-              <DialogHeader>
-                <DialogTitle>Import leaves</DialogTitle>
-              </DialogHeader>
-              <div className="text-sm text-muted-foreground">Upload your CSV file (coming soon)</div>
-              <DialogFooter>
-                <Button variant="outline" onClick={()=>setOpenImport(false)}>Close</Button>
-                <Button onClick={()=>setOpenImport(false)}>Upload</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          {currentUserRole === "admin" && (
+            <Dialog open={openImport} onOpenChange={setOpenImport}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">Import leaves</Button>
+              </DialogTrigger>
+              <DialogContent className="bg-card">
+                <DialogHeader>
+                  <DialogTitle>Import leaves</DialogTitle>
+                </DialogHeader>
+                <div className="text-sm text-muted-foreground">Upload your CSV file (coming soon)</div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={()=>setOpenImport(false)}>Close</Button>
+                  <Button onClick={()=>setOpenImport(false)}>Upload</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
 
           <Dialog open={openApply} onOpenChange={setOpenApply}>
             <DialogTrigger asChild>
@@ -186,10 +273,43 @@ export default function Leave() {
                 <DialogTitle>Apply leave</DialogTitle>
               </DialogHeader>
               <div className="grid gap-3">
-                <div className="space-y-1">
-                  <Label>Your name</Label>
-                  <Input placeholder="Full name" value={applyName} onChange={(e)=>setApplyName(e.target.value)} />
-                </div>
+                {currentUserRole === "admin" && (
+                  <div className="space-y-1">
+                    <Label>Employee</Label>
+                    <Input
+                      placeholder="Search employee..."
+                      value={empQuery}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEmpQuery(v);
+                        loadEmployees(v);
+                      }}
+                    />
+                    <div className="max-h-40 overflow-auto border rounded-md">
+                      {employees.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No employees found.</div>
+                      ) : (
+                        employees.slice(0, 30).map((e) => (
+                          <button
+                            key={e._id}
+                            type="button"
+                            className={`w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-muted ${applyEmployeeId === e._id ? "bg-muted" : ""}`}
+                            onClick={() => { setApplyEmployeeId(e._id); setApplyEmployeeName(e.name); }}
+                          >
+                            <Avatar className="w-7 h-7">
+                              <AvatarImage src={toAbsoluteAvatar(e.avatar)} alt={e.name} />
+                              <AvatarFallback className="text-[10px] font-semibold">{e.initials}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm capitalize">{e.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    {applyEmployeeName && (
+                      <div className="text-xs text-muted-foreground">Selected: {applyEmployeeName}</div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label>Leave type</Label>
                   <Select value={applyType} onValueChange={setApplyType}>
@@ -225,49 +345,82 @@ export default function Leave() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={openAssign} onOpenChange={setOpenAssign}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">Assign leave</Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card">
-              <DialogHeader>
-                <DialogTitle>Assign leave</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-3">
-                <div className="space-y-1">
-                  <Label>Employee</Label>
-                  <Input placeholder="Full name" value={assignName} onChange={(e)=>setAssignName(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Leave type</Label>
-                  <Select value={assignType} onValueChange={setAssignType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="casual">Casual</SelectItem>
-                      <SelectItem value="sick">Sick</SelectItem>
-                      <SelectItem value="annual">Annual</SelectItem>
-                      <SelectItem value="unpaid">Unpaid</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {currentUserRole === "admin" && (
+            <Dialog open={openAssign} onOpenChange={setOpenAssign}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">Assign leave</Button>
+              </DialogTrigger>
+              <DialogContent className="bg-card">
+                <DialogHeader>
+                  <DialogTitle>Assign leave</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-3">
                   <div className="space-y-1">
-                    <Label>From</Label>
-                    <Input type="date" value={assignFrom} onChange={(e)=>setAssignFrom(e.target.value)} />
+                    <Label>Employee</Label>
+                    <Input
+                      placeholder="Search employee..."
+                      value={empQuery}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEmpQuery(v);
+                        loadEmployees(v);
+                      }}
+                    />
+                    <div className="max-h-40 overflow-auto border rounded-md">
+                      {employees.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">No employees found.</div>
+                      ) : (
+                        employees.slice(0, 30).map((e) => (
+                          <button
+                            key={e._id}
+                            type="button"
+                            className={`w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-muted ${assignEmployeeId === e._id ? "bg-muted" : ""}`}
+                            onClick={() => { setAssignEmployeeId(e._id); setAssignEmployeeName(e.name); }}
+                          >
+                            <Avatar className="w-7 h-7">
+                              <AvatarImage src={toAbsoluteAvatar(e.avatar)} alt={e.name} />
+                              <AvatarFallback className="text-[10px] font-semibold">{e.initials}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm capitalize">{e.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    {assignEmployeeName && (
+                      <div className="text-xs text-muted-foreground">Selected: {assignEmployeeName}</div>
+                    )}
                   </div>
                   <div className="space-y-1">
-                    <Label>To</Label>
-                    <Input type="date" value={assignTo} onChange={(e)=>setAssignTo(e.target.value)} />
+                    <Label>Leave type</Label>
+                    <Select value={assignType} onValueChange={setAssignType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="casual">Casual</SelectItem>
+                        <SelectItem value="sick">Sick</SelectItem>
+                        <SelectItem value="annual">Annual</SelectItem>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>From</Label>
+                      <Input type="date" value={assignFrom} onChange={(e)=>setAssignFrom(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>To</Label>
+                      <Input type="date" value={assignTo} onChange={(e)=>setAssignTo(e.target.value)} />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={()=>setOpenAssign(false)}>Close</Button>
-                <Button onClick={assignLeave}>Assign</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button variant="outline" onClick={()=>setOpenAssign(false)}>Close</Button>
+                  <Button onClick={assignLeave}>Assign</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -317,13 +470,31 @@ export default function Leave() {
                           const dur = Math.max(1, Math.ceil((to.getTime()-from.getTime())/(1000*60*60*24))+1);
                           return (
                             <TableRow key={l._id}>
-                              <TableCell>{l.name || "-"}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="w-7 h-7">
+                                    <AvatarImage src={toAbsoluteAvatar((employees.find((e)=>e._id===String(l.employeeId))?.avatar) || "")} alt={l.name || ""} />
+                                    <AvatarFallback className="text-[10px] font-semibold">{initialsFrom(l.name)}</AvatarFallback>
+                                  </Avatar>
+                                  {l.employeeId ? (
+                                    <button
+                                      type="button"
+                                      className="capitalize text-left hover:underline"
+                                      onClick={() => navigate(`/hrm/employees/${l.employeeId}`, { state: { dbId: l.employeeId } })}
+                                    >
+                                      {l.name || "-"}
+                                    </button>
+                                  ) : (
+                                    <span className="capitalize">{l.name || "-"}</span>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell className="capitalize">{l.type}</TableCell>
                               <TableCell>{from.toLocaleDateString()} - {to.toLocaleDateString()}</TableCell>
                               <TableCell>{dur} day(s)</TableCell>
                               <TableCell className="capitalize">{l.status}</TableCell>
                               <TableCell className="text-right">
-                                {activeTab === 'pending' && (
+                                {activeTab === 'pending' && currentUserRole === 'admin' && (
                                   <div className="flex items-center gap-2 justify-end">
                                     <Button size="sm" variant="outline" onClick={()=>updateStatus(l._id, 'approved')}>Approve</Button>
                                     <Button size="sm" variant="destructive" onClick={()=>updateStatus(l._id, 'rejected')}>Reject</Button>

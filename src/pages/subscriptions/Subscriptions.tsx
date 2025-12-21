@@ -562,8 +562,26 @@ export default function Subscriptions() {
                   const labelName = (s.labels || [])[0];
                   return (
                     <TableRow key={String(s._id)}>
-                      <TableCell className="whitespace-nowrap font-medium">{s.subscriptionNo ? `#${s.subscriptionNo}` : "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{s.title || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium">
+                        {s.subscriptionNo ? (
+                          <button
+                            onClick={() => window.location.href = `/subscriptions/${s._id}`}
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            #{s.subscriptionNo}
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <button
+                          onClick={() => window.location.href = `/subscriptions/${s._id}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {s.title || "-"}
+                        </button>
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{s.type || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{s.client || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{s.firstBillingDate ? new Date(s.firstBillingDate).toISOString().slice(0, 10) : "-"}</TableCell>

@@ -1,94 +1,157 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Label } from "@/components/ui/label";
-import { LayoutGrid, Search, Edit, X } from "lucide-react";
+import { Search, Edit, X, Plus } from "lucide-react";
+
+const API_BASE = (import.meta as any)?.env?.VITE_API_BASE || "http://localhost:5000";
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return { headers, token };
+};
 
 interface Announcement {
-  id: number;
+  _id: string;
   title: string;
-  createdBy: string;
-  creatorInitials: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
+  createdByName?: string;
+  startDate?: string; // ISO
+  endDate?: string; // ISO
+  createdAt?: string;
 }
 
-const initialData: Announcement[] = [
-  { id: 1, title: "Updated timing", createdBy: "HealthSpire", creatorInitials: "HS", startDate: "2025-04-08", endDate: "2025-04-30" },
-  { id: 2, title: "Holiday Announcement", createdBy: "HealthSpire", creatorInitials: "HS", startDate: "2025-03-14", endDate: "2025-03-31" },
-  { id: 3, title: "Working Announcement", createdBy: "HealthSpire", creatorInitials: "HS", startDate: "2025-03-12", endDate: "2025-03-31" },
-];
+const toYmd = (v?: string) => {
+  if (!v) return "";
+  try {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
+const initialsFrom = (name?: string) => {
+  const s = String(name || "").trim();
+  if (!s) return "U";
+  const parts = s.split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+};
 
 export default function Announcements() {
-  const [items, setItems] = useState<Announcement[]>(initialData);
+  const navigate = useNavigate();
+  const [items, setItems] = useState<Announcement[]>([]);
   const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState("10");
-  const [openAdd, setOpenAdd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // form
-  const [title, setTitle] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const fetchAnnouncements = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const { headers, token } = getAuthHeaders();
+      if (!token) {
+        setError("Please login again.");
+        navigate("/auth", { replace: true });
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/api/announcements`, { headers });
+      const json = await res.json().catch(() => null);
+      if (res.status === 401) {
+        setError("Session expired. Please login again.");
+        navigate("/auth", { replace: true });
+        return;
+      }
+      if (!res.ok) throw new Error(json?.error || `Failed to fetch announcements (HTTP ${res.status})`);
+      setItems(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      const msg = String(e?.message || "Failed to fetch announcements");
+      if (msg.toLowerCase().includes("failed to fetch")) {
+        setError(`Failed to fetch announcements. Backend reachable at ${API_BASE}? (Check server is running on port 5000 and CORS allows ${window.location.origin})`);
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
 
   const list = useMemo(() => {
     const s = query.toLowerCase();
-    return items.filter((i) => i.title.toLowerCase().includes(s) || i.createdBy.toLowerCase().includes(s));
+    return items.filter((i) => i.title.toLowerCase().includes(s) || String(i.createdByName || "").toLowerCase().includes(s));
   }, [items, query]);
 
-  const addItem = () => {
-    if (!title.trim()) return;
-    setItems((prev) => [
-      { id: Math.floor(Math.random() * 100000), title: title.trim(), createdBy: "HealthSpire", creatorInitials: "HS", startDate: start || "2025-01-01", endDate: end || "2025-01-31" },
-      ...prev,
-    ]);
-    setOpenAdd(false);
-    setTitle(""); setStart(""); setEnd("");
-  };
+  const remove = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const { headers, token } = getAuthHeaders();
+      if (!token) {
+        setError("Please login again.");
+        navigate("/auth", { replace: true });
+        return;
+      }
 
-  const remove = (id: number) => setItems((prev) => prev.filter((i) => i.id !== id));
+      const res = await fetch(`${API_BASE}/api/announcements/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      const json = await res.json().catch(() => null);
+      if (res.status === 401) {
+        setError("Session expired. Please login again.");
+        navigate("/auth", { replace: true });
+        return;
+      }
+      if (!res.ok) throw new Error(json?.error || `Failed to delete announcement (HTTP ${res.status})`);
+      setItems((prev) => prev.filter((i) => i._id !== id));
+    } catch (e: any) {
+      setError(String(e?.message || "Failed to delete announcement"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-sm text-muted-foreground">Announcements</h1>
-        <div className="flex items-center gap-2">
-          <Dialog open={openAdd} onOpenChange={setOpenAdd}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">Add announcement</Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card">
-              <DialogHeader>
-                <DialogTitle>Add announcement</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-3">
-                <div className="space-y-1"><Label>Title</Label><Input placeholder="Title" value={title} onChange={(e)=>setTitle(e.target.value)} /></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1"><Label>Start date</Label><Input type="date" value={start} onChange={(e)=>setStart(e.target.value)} /></div>
-                  <div className="space-y-1"><Label>End date</Label><Input type="date" value={end} onChange={(e)=>setEnd(e.target.value)} /></div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={()=>setOpenAdd(false)}>Close</Button>
-                <Button onClick={addItem}>Save</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button variant="outline" size="sm">Print</Button>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search" value={query} onChange={(e)=>setQuery(e.target.value)} className="pl-9 w-56" />
-          </div>
-        </div>
+        <h1 className="text-lg font-medium">Announcements</h1>
+        <Button size="sm" variant="outline" onClick={() => navigate("/announcements/new")}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add announcement
+        </Button>
       </div>
 
       <Card>
         <CardContent className="p-0">
           <div className="p-4">
+
+            <div className="flex items-center justify-between gap-3 pb-3 border-b">
+              <div />
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => window.print()}>Print</Button>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input placeholder="Search" value={query} onChange={(e)=>setQuery(e.target.value)} className="pl-9 w-56" />
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mb-3 text-sm text-destructive">{error}</div>
+            )}
             
             <Table>
               <TableHeader>
@@ -102,22 +165,30 @@ export default function Announcements() {
               </TableHeader>
               <TableBody>
                 {list.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="text-primary underline cursor-pointer">{a.title}</TableCell>
+                  <TableRow key={a._id}>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="text-primary hover:underline text-left"
+                        onClick={() => navigate(`/announcements/${a._id}`)}
+                      >
+                        {a.title}
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="w-6 h-6">
-                          <AvatarFallback className="bg-gradient-to-br from-primary to-indigo text-white text-[10px]">{a.creatorInitials}</AvatarFallback>
+                          <AvatarFallback className="bg-gradient-to-br from-primary to-indigo text-white text-[10px]">{initialsFrom(a.createdByName)}</AvatarFallback>
                         </Avatar>
-                        <span>{a.createdBy}</span>
+                        <span>{a.createdByName || ""}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{a.startDate}</TableCell>
-                    <TableCell>{a.endDate}</TableCell>
+                    <TableCell>{toYmd(a.startDate)}</TableCell>
+                    <TableCell>{toYmd(a.endDate)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon-sm"><Edit className="w-4 h-4"/></Button>
-                        <Button variant="ghost" size="icon-sm" onClick={()=>remove(a.id)}><X className="w-4 h-4"/></Button>
+                        <Button variant="ghost" size="icon-sm" disabled={loading} onClick={()=>remove(a._id)}><X className="w-4 h-4"/></Button>
                       </div>
                     </TableCell>
                   </TableRow>

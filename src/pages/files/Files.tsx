@@ -33,7 +33,7 @@ function formatBytes(n?: number) {
   return `${num.toFixed(num >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
 
-export default function Files({ leadId }: { leadId?: string }) {
+export default function Files({ leadId, clientId }: { leadId?: string; clientId?: string }) {
   const [selected, setSelected] = useState<string | null>(null);
 
   const [files, setFiles] = useState<FileDoc[]>([]);
@@ -44,16 +44,17 @@ export default function Files({ leadId }: { leadId?: string }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const canUpload = Boolean(leadId);
+  const canUpload = Boolean(leadId || clientId);
 
   const loadFiles = async () => {
-    if (!leadId) {
+    if (!leadId && !clientId) {
       setFiles([]);
       return;
     }
     try {
       const params = new URLSearchParams();
-      params.set("leadId", leadId);
+      if (leadId) params.set("leadId", leadId);
+      if (clientId) params.set("clientId", clientId);
       if (query.trim()) params.set("q", query.trim());
       const res = await fetch(`${API_BASE}/api/files?${params.toString()}`);
       const json = await res.json().catch(() => null);
@@ -67,7 +68,7 @@ export default function Files({ leadId }: { leadId?: string }) {
   useEffect(() => {
     loadFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadId]);
+  }, [leadId, clientId]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -93,9 +94,10 @@ export default function Files({ leadId }: { leadId?: string }) {
   };
 
   const uploadOne = async (f: File) => {
-    if (!leadId) throw new Error("Missing leadId");
+    if (!leadId && !clientId) throw new Error("Missing leadId/clientId");
     const fd = new FormData();
-    fd.append("leadId", leadId);
+    if (leadId) fd.append("leadId", leadId);
+    if (clientId) fd.append("clientId", clientId);
     fd.append("name", f.name);
     fd.append("file", f);
     const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
@@ -106,7 +108,7 @@ export default function Files({ leadId }: { leadId?: string }) {
 
   const saveUploads = async () => {
     if (!canUpload) {
-      toast.error("Open a lead first");
+      toast.error("Open a client or lead first");
       return;
     }
     if (!pendingFiles.length) {

@@ -40,6 +40,9 @@ import itemsRouter from "./routes/items.js";
 import estimateRequestsRouter from "./routes/estimateRequests.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
 import subscriptionLabelsRouter from "./routes/subscriptionLabels.js";
+import messagesRouter from "./routes/messages.js";
+import usersRouter from "./routes/users.js";
+import announcementsRouter from "./routes/announcements.js";
 import authRouter from "./routes/auth.js";
 import estimateFormsRouter from "./routes/estimateForms.js";
 import leadsRouter from "./routes/leads.js";
@@ -126,6 +129,7 @@ app.use("/api/task-labels", taskLabelsRouter);
 app.use("/api/ticket-labels", ticketLabelsRouter);
 app.use("/api/ticket-templates", ticketTemplatesRouter);
 app.use("/api/reminders", remindersRouter);
+app.use("/api/messages", messagesRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/events", eventsApiRouter);
 app.use("/api/estimate-requests", estimateRequestsRouter);
@@ -133,6 +137,8 @@ app.use("/api/subscriptions", subscriptionsRouter);
 app.use("/api/subscription-labels", subscriptionLabelsRouter);
 // Backward/alternative path alias to avoid 404s from different frontends
 app.use("/api/subscriptionlabels", subscriptionLabelsRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/announcements", announcementsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/estimate-forms", estimateFormsRouter);
 // Backward/alternative path alias to avoid 404s from different frontends

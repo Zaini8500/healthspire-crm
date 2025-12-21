@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -86,7 +87,7 @@ export default function TaskDetails() {
     if (!id) return;
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/tasks/${id}`);
+      const r = await fetch(`${API_BASE}/api/tasks/${id}`, { headers: getAuthHeaders() });
       if (r.ok) {
         const d = await r.json();
         setRow(d);
@@ -102,7 +103,7 @@ export default function TaskDetails() {
       const r = await fetch(`${API_BASE}/api/tasks/${taskId}`,
         {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify(patch),
         }
       );
@@ -139,7 +140,7 @@ export default function TaskDetails() {
         const fd = new FormData();
         fd.append("file", f);
         fd.append("name", f.name);
-        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", headers: getAuthHeaders(), body: fd });
         if (r.ok) uploaded += 1;
       }
       return uploaded;
@@ -156,7 +157,7 @@ export default function TaskDetails() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/employees`);
+        const r = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
         if (r.ok) {
           const d = await r.json();
           setEmployees(Array.isArray(d) ? d : []);
@@ -169,7 +170,7 @@ export default function TaskDetails() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/task-labels`);
+        const r = await fetch(`${API_BASE}/api/task-labels`, { headers: getAuthHeaders() });
         if (r.ok) {
           const d = await r.json();
           setLabels(Array.isArray(d) ? d : []);
@@ -182,7 +183,7 @@ export default function TaskDetails() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/tasks`);
+        const r = await fetch(`${API_BASE}/api/tasks`, { headers: getAuthHeaders() });
         if (r.ok) {
           const d = await r.json();
           setAllTasks(Array.isArray(d) ? d : []);

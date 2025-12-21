@@ -4,7 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { MessagingProvider } from "@/contexts/MessagingContext";
 import Dashboard from "./pages/Dashboard";
+import ClientDashboard from "./pages/dashboard/ClientDashboard";
+import TeamMemberDashboard from "./pages/dashboard/TeamMemberDashboard";
+import MarketerDashboard from "./pages/dashboard/MarketerDashboard";
 import Events from "./pages/events/Events";
 import Clients from "./pages/clients/Clients";
 import ClientDetails from "./pages/clients/ClientDetails";
@@ -23,7 +27,11 @@ import Payroll from "./pages/hrm/Payroll";
 import Recruitment from "./pages/hrm/Recruitment";
 import Departments from "./pages/hrm/Departments";
 import Announcements from "./pages/announcements/Announcements";
+import AddAnnouncement from "./pages/announcements/AddAnnouncement";
+import AnnouncementView from "./pages/announcements/AnnouncementView";
 import Subscriptions from "./pages/subscriptions/Subscriptions";
+import SubscriptionDetails from "./pages/subscriptions/SubscriptionDetails";
+import Messaging from "./pages/messaging";
 import Orders from "./pages/sales/Orders";
 import Store from "./pages/sales/Store";
 import Checkout from "./pages/sales/Checkout";
@@ -79,6 +87,73 @@ import AuthLayout from "./pages/auth/AuthLayout";
 
 const queryClient = new QueryClient();
 
+const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?: string; permissions?: string[] } | null => {
+  const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const normalizePerms = (p?: any): Set<string> => {
+  const out = new Set<string>();
+  if (Array.isArray(p)) {
+    for (const x of p) {
+      const s = String(x || "").trim();
+      if (s) out.add(s);
+    }
+  }
+  return out;
+};
+
+const getModuleFromPath = (pathname: string): string => {
+  if (pathname.startsWith("/crm")) return "crm";
+  if (pathname.startsWith("/hrm")) return "hrm";
+  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/prospects")) return "prospects";
+  if (pathname.startsWith("/sales") || pathname.startsWith("/invoices")) return "sales";
+  if (pathname.startsWith("/reports")) return "reports";
+  if (pathname.startsWith("/tickets")) return "tickets";
+  if (pathname.startsWith("/events")) return "events";
+  if (pathname.startsWith("/clients")) return "clients";
+  if (pathname.startsWith("/tasks")) return "tasks";
+  if (pathname.startsWith("/messages") || pathname.startsWith("/messaging") || pathname.startsWith("/email") || pathname.startsWith("/calls")) return "messages";
+  if (pathname.startsWith("/announcements")) return "announcements";
+  if (pathname.startsWith("/subscriptions")) return "subscriptions";
+  if (pathname.startsWith("/calendar")) return "calendar";
+  if (pathname.startsWith("/notes")) return "notes";
+  if (pathname.startsWith("/files")) return "files";
+  if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/user-management")) return "user_management";
+  if (pathname.startsWith("/client")) return "client_portal";
+  if (pathname === "/") return "dashboard";
+  return "other";
+};
+
+const RoleGuard = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const user = getStoredAuthUser();
+  const role = user?.role || "admin";
+  const perms = normalizePerms(user?.permissions);
+  const moduleKey = getModuleFromPath(location.pathname);
+
+  if (role === "admin") return <>{children}</>;
+
+  if (role === "client") {
+    const allowed = new Set(["client_portal", "messages", "tickets", "announcements", "dashboard"]);
+    if (allowed.has(moduleKey)) return <>{children}</>;
+    return <Navigate to="/client" replace />;
+  }
+
+  // staff (including marketer)
+  const staffDefault = new Set(["dashboard", "messages", "announcements", "calendar", "tasks"]);
+  if (staffDefault.has(moduleKey)) return <>{children}</>;
+  if (perms.has(moduleKey)) return <>{children}</>;
+  return <Navigate to="/" replace />;
+};
+
 const InvoicePreviewAccess = () => {
   const hasToken = Boolean(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"));
   const location = useLocation();
@@ -97,13 +172,30 @@ const EstimatePreviewAccess = () => {
   return hasToken || isPrintMode || isPdfMode ? <EstimatePreview /> : <Navigate to="/auth" replace />;
 };
 
+const DashboardByRole = () => {
+  const user = getStoredAuthUser();
+  const role = user?.role || "admin";
+  
+  switch (role) {
+    case "client":
+      return <ClientDashboard />;
+    case "marketer":
+      return <MarketerDashboard />;
+    case "staff":
+      return <TeamMemberDashboard />;
+    default:
+      return <Dashboard />;
+  }
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter future={{ v7_relativeSplatPath: true }}>
-        <Routes>
+      <MessagingProvider>
+        <BrowserRouter future={{ v7_relativeSplatPath: true }}>
+          <Routes>
           {/* Public auth route */}
           <Route path="/auth" element={<AuthLayout />} />
 
@@ -117,11 +209,15 @@ const App = () => (
           <Route
             element={
               (localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"))
-                ? <MainLayout />
+                ? (
+                  <RoleGuard>
+                    <MainLayout />
+                  </RoleGuard>
+                )
                 : <Navigate to="/auth" replace />
             }
           >
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<DashboardByRole />} />
             <Route path="/events" element={<Events />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/clients/:id" element={<ClientDetails />} />
@@ -149,14 +245,17 @@ const App = () => (
             <Route path="/projects/:id" element={<ProjectDashboard />} />
             <Route path="/projects/timeline" element={<Timeline />} />
             {/* Communication */}
-            <Route path="/messages" element={<Chat />} />
+            <Route path="/messages" element={<Messaging />} />
             <Route path="/email" element={<Chat />} />
             <Route path="/calls" element={<Chat />} />
+            <Route path="/messaging" element={<Messaging />} />
             {/* General */}
             <Route path="/announcements" element={<Announcements />} />
+            <Route path="/announcements/new" element={<AddAnnouncement />} />
+            <Route path="/announcements/:id" element={<AnnouncementView />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            {/* Sales */}
-            <Route path="/sales/orders" element={<Orders />} />
+            <Route path="/subscriptions/:id" element={<SubscriptionDetails />} />
+            <Route path="/orders" element={<Orders />} />
             <Route path="/sales/orders/:id" element={<OrderDetailPage />} />
             <Route path="/sales/store" element={<Store />} />
             <Route path="/sales/checkout" element={<Checkout />} />
@@ -203,14 +302,15 @@ const App = () => (
             <Route path="/reports/leads/team-members" element={<LeadsTeamMembers />} />
             <Route path="/reports/tickets/statistics" element={<TicketsStatistics />} />
             {/* Portals */}
-            <Route path="/client" element={<Dashboard />} />
+            <Route path="/client" element={<ClientDashboard />} />
             <Route path="/admin" element={<Dashboard />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:section" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
+      </MessagingProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

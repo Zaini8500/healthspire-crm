@@ -51,7 +51,7 @@ function formatCreated(iso?: string) {
   }
 }
 
-export default function Notes({ leadId }: { leadId?: string }) {
+export default function Notes({ leadId, clientId }: { leadId?: string; clientId?: string }) {
   const [tab, setTab] = useState("list");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("-");
@@ -78,7 +78,7 @@ export default function Notes({ leadId }: { leadId?: string }) {
   const [noteCategory, setNoteCategory] = useState("-");
   const [noteLabel, setNoteLabel] = useState("-");
 
-  const canUseLead = Boolean(leadId);
+  const canUseContext = Boolean(leadId || clientId);
 
   const labelColorByName = useMemo(() => {
     const m = new Map<string, string>();
@@ -117,14 +117,15 @@ export default function Notes({ leadId }: { leadId?: string }) {
   }, []);
 
   const loadNotes = async () => {
-    if (!leadId) {
+    if (!leadId && !clientId) {
       setNotes([]);
       return;
     }
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.set("leadId", leadId);
+      if (leadId) params.set("leadId", leadId);
+      if (clientId) params.set("clientId", clientId);
       if (query.trim()) params.set("q", query.trim());
       const res = await fetch(`${API_BASE}/api/notes?${params.toString()}`);
       const json = await res.json().catch(() => null);
@@ -213,7 +214,7 @@ export default function Notes({ leadId }: { leadId?: string }) {
   useEffect(() => {
     loadNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadId]);
+  }, [leadId, clientId]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -253,8 +254,8 @@ export default function Notes({ leadId }: { leadId?: string }) {
   };
 
   const saveNote = async () => {
-    if (!leadId) {
-      toast.error("Open a lead first");
+    if (!leadId && !clientId) {
+      toast.error("Open a client or lead first");
       return;
     }
     const t = noteTitle.trim();
@@ -263,8 +264,9 @@ export default function Notes({ leadId }: { leadId?: string }) {
       return;
     }
     try {
-      const payload = {
-        leadId,
+      const payload: any = {
+        leadId: leadId || undefined,
+        clientId: clientId || undefined,
         title: t,
         text: noteText || "",
         category: noteCategory !== "-" && noteCategory !== "- Category -" ? noteCategory : "",
@@ -361,7 +363,7 @@ export default function Notes({ leadId }: { leadId?: string }) {
               {/* Add note */}
               <Dialog open={openAddNote} onOpenChange={setOpenAddNote}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2" onClick={openAdd} disabled={!canUseLead}><Plus className="w-4 h-4"/> Add note</Button>
+                  <Button size="sm" className="gap-2" onClick={openAdd} disabled={!canUseContext}><Plus className="w-4 h-4"/> Add note</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-2xl">
                   <DialogHeader>
@@ -409,7 +411,7 @@ export default function Notes({ leadId }: { leadId?: string }) {
                   </div>
                   <DialogFooter className="gap-2">
                     <Button variant="outline" type="button" onClick={() => setOpenAddNote(false)}>Close</Button>
-                    <Button type="button" onClick={saveNote} disabled={loading || !canUseLead}>Save</Button>
+                    <Button type="button" onClick={saveNote} disabled={loading || !canUseContext}>Save</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
