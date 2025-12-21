@@ -22,4 +22,5 @@ CounterSchema.pre("validate", function (next) {
   next();
 });
 
-export default mongoose.models.Counter || mongoose.model("Counter", CounterSchema);
+const Counter = mongoose.models.Counter || mongoose.model("Counter", CounterSchema);
+export default Counter;

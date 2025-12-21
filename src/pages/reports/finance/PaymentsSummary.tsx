@@ -10,7 +10,9 @@ import { toast } from "@/components/ui/sonner";
 
 const API_BASE = "http://localhost:5000";
 
-type Payment = { _id: string; clientId?: string; client?: string; amount?: number; date?: string; method?: string };
+type Payment = { _id: string; clientId?: string; client?: string; invoiceId?: string; amount?: number; date?: string; method?: string };
+type Invoice = { _id: string; clientId?: string; client?: string };
+type Client = { _id: string; name?: string; company?: string; person?: string };
 
 export default function PaymentsSummary() {
   const [method, setMethod] = useState("-");
@@ -19,13 +21,23 @@ export default function PaymentsSummary() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
 
   const load = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/payments`);
-      const data = res.ok ? await res.json() : [];
-      setPayments(Array.isArray(data) ? data : []);
+      const [payRes, invRes, cliRes] = await Promise.all([
+        fetch(`${API_BASE}/api/payments`),
+        fetch(`${API_BASE}/api/invoices`),
+        fetch(`${API_BASE}/api/clients`),
+      ]);
+      const payData = payRes.ok ? await payRes.json() : [];
+      const invData = invRes.ok ? await invRes.json() : [];
+      const cliData = cliRes.ok ? await cliRes.json() : [];
+      setPayments(Array.isArray(payData) ? payData : []);
+      setInvoices(Array.isArray(invData) ? invData : []);
+      setClients(Array.isArray(cliData) ? cliData : []);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load payments");
     } finally {
@@ -35,16 +47,35 @@ export default function PaymentsSummary() {
 
   useEffect(() => { load(); }, []);
 
+  const invById = useMemo(() => {
+    const m = new Map<string, Invoice>();
+    for (const i of invoices) if (i?._id) m.set(String(i._id), i);
+    return m;
+  }, [invoices]);
+
+  const clientNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clients) {
+      const name = (c.name || c.company || c.person || "-").toString();
+      m.set(String(c._id), name);
+    }
+    return m;
+  }, [clients]);
+
   const filteredAgg = useMemo(() => {
     const y = Number(year);
     const matches = (s: string) => (s || "").toLowerCase().includes(query.trim().toLowerCase());
     const getYear = (dt?: string) => { if (!dt) return NaN; const d = new Date(dt); return d.getFullYear(); };
     const grp = new Map<string, { client: string; clientId?: string; count: number; amount: number }>();
     const inYear = payments.filter(p => !y || getYear(p.date as any) === y);
-    const flt = inYear.filter(p => (!query || matches(p.client || "")) && (method === "-" || (p.method || "-").toLowerCase() === method.toLowerCase()));
+    const flt = inYear.filter(p => (method === "-" || (p.method || "-").toLowerCase() === method.toLowerCase()));
     for (const p of flt) {
-      const key = p.clientId || p.client || "-";
-      const row = grp.get(key) || { client: p.client || "-", clientId: p.clientId, count: 0, amount: 0 };
+      const inv = p.invoiceId ? invById.get(String(p.invoiceId)) : undefined;
+      const resolvedClientId = (p.clientId || inv?.clientId) ? String(p.clientId || inv?.clientId) : undefined;
+      const resolvedClient = (p.client || inv?.client || "-");
+      if (query && !matches(resolvedClient)) continue;
+      const key = resolvedClientId || resolvedClient;
+      const row = grp.get(key) || { client: resolvedClient, clientId: resolvedClientId, count: 0, amount: 0 };
       row.count += 1;
       row.amount += Number(p.amount || 0);
       grp.set(key, row);
@@ -138,13 +169,15 @@ export default function PaymentsSummary() {
               {loading ? (
                 <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
               ) : filteredAgg.length ? (
-                filteredAgg.map((r) => (
+                filteredAgg.map((r) => {
+                  const display = r.clientId && clientNameById.get(String(r.clientId)) ? clientNameById.get(String(r.clientId))! : r.client;
+                  return (
                   <TableRow key={`${r.clientId || r.client}`}>
-                    <TableCell className="whitespace-nowrap">{r.client}</TableCell>
+                    <TableCell className="whitespace-nowrap">{display}</TableCell>
                     <TableCell>{r.count}</TableCell>
                     <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
                   </TableRow>
-                ))
+                )})
               ) : (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">No record found.</TableCell>
