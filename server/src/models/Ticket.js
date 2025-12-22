@@ -5,6 +5,7 @@ const TicketSchema = new mongoose.Schema(
     ticketNo: { type: Number },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     client: { type: String, default: "" },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
     title: { type: String, required: true },
     description: { type: String, default: "" },
     requestedBy: { type: String, default: "" },

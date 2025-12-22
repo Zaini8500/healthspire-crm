@@ -23,6 +23,7 @@ export interface Message {
 
 export interface Conversation {
   _id: string;
+  projectId?: string;
   participants: Array<{
     _id: string;
     name: string;
@@ -31,6 +32,8 @@ export interface Conversation {
   }>;
   lastMessage?: Message;
   isGroup: boolean;
+  groupName?: string;
+  unreadCount?: number;
   updatedAt: string;
 }
 
@@ -51,6 +54,21 @@ export const fetchConversations = async (): Promise<Conversation[]> => {
     throw new Error('Failed to fetch conversations');
   }
   
+  return response.json();
+};
+
+export const createProjectConversation = async (projectId: string): Promise<Conversation> => {
+  const response = await fetch(`${API_BASE}/api/messages/conversations`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ projectId }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || error.message || 'Failed to create conversation');
+  }
+
   return response.json();
 };
 

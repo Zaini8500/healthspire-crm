@@ -2,10 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  BarChart,
-  Bar,
   LineChart,
   Line,
   PieChart,
@@ -18,34 +20,31 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import {
-  Calendar,
   MessageSquare,
   Ticket,
   FileText,
-  Clock,
   CheckCircle,
-  AlertCircle,
   TrendingUp,
-  User,
   Phone,
   Mail,
-  MapPin,
   Star,
   Download,
   Eye,
-  Edit,
   Plus,
+  Send,
+  Calendar,
+  DollarSign,
+  Clock,
+  User,
+  Briefcase,
+  MessageCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getAuthHeaders } from "@/lib/api/auth";
+import { toast } from "sonner";
 
 const API_BASE = "http://localhost:5000";
-
-const projectProgressData = [
-  { name: "Website Redesign", progress: 75, status: "In Progress" },
-  { name: "Mobile App Development", progress: 45, status: "In Progress" },
-  { name: "SEO Optimization", progress: 90, status: "Almost Complete" },
-  { name: "Content Marketing", progress: 30, status: "Just Started" },
-];
 
 const invoiceStatusData = [
   { name: "Paid", value: 8, color: "#10b981" },
@@ -62,11 +61,6 @@ const monthlyActivityData = [
   { month: "Jun", projects: 3, invoices: 4 },
 ];
 
-const recentTickets = [
-  { id: "TK-001", title: "Login issue resolved", status: "Closed", date: "2024-06-15" },
-  { id: "TK-002", title: "Feature request for dashboard", status: "In Progress", date: "2024-06-18" },
-  { id: "TK-003", title: "Payment confirmation needed", status: "Pending", date: "2024-06-20" },
-];
 
 const recentInvoices = [
   { id: "INV-001", amount: "$2,500", status: "Paid", date: "2024-06-10" },
@@ -75,22 +69,168 @@ const recentInvoices = [
 ];
 
 export default function ClientDashboard() {
+  const navigate = useNavigate();
+  const [clientName, setClientName] = useState("Client");
+  const [clientAvatar, setClientAvatar] = useState<string | undefined>(undefined);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [projectRequestOpen, setProjectRequestOpen] = useState(false);
+  const [ticketOpen, setTicketOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form states
+  const [projectForm, setProjectForm] = useState({ title: "", description: "", budget: "", deadline: "" });
+  const [ticketForm, setTicketForm] = useState({ title: "", description: "", priority: "medium" });
+
   const [activeProjects, setActiveProjects] = useState(0);
   const [completedProjects, setCompletedProjects] = useState(0);
   const [openTickets, setOpenTickets] = useState(0);
-  const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingInvoices, setPendingInvoices] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
 
   useEffect(() => {
-    // Simulate API calls for client-specific data
-    setActiveProjects(4);
-    setCompletedProjects(12);
-    setOpenTickets(2);
-    setUnreadMessages(5);
-    setPendingInvoices(4);
-    setTotalSpent(28500);
+    let mounted = true;
+
+    (async () => {
+      try {
+        const headers = getAuthHeaders();
+        const [meRes, projectsRes, ticketsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/client/me`, { headers }),
+          fetch(`${API_BASE}/api/client/projects`, { headers }),
+          fetch(`${API_BASE}/api/client/tickets`, { headers }),
+        ]);
+
+        if (!mounted) return;
+
+        const meJson = meRes.ok ? await meRes.json() : null;
+        const client = meJson?.client;
+        const displayName = client?.company || client?.person || meJson?.user?.name || meJson?.user?.email || "Client";
+        setClientName(String(displayName || "Client"));
+        setClientAvatar(client?.avatar ? String(client.avatar) : undefined);
+
+        const projectsJson = projectsRes.ok ? await projectsRes.json() : [];
+        const projectsArr = Array.isArray(projectsJson) ? projectsJson : [];
+        setProjects(projectsArr);
+
+        const ticketsJson = ticketsRes.ok ? await ticketsRes.json() : [];
+        const ticketsArr = Array.isArray(ticketsJson) ? ticketsJson : [];
+        setTickets(ticketsArr);
+
+        const completed = projectsArr.filter((p: any) => String(p?.status || "").toLowerCase() === "completed").length;
+        const active = Math.max(0, projectsArr.length - completed);
+        setActiveProjects(active);
+        setCompletedProjects(completed);
+
+        const open = ticketsArr.filter((t: any) => {
+          const s = String(t?.status || "").toLowerCase();
+          return s && s !== "closed";
+        }).length;
+        setOpenTickets(open);
+
+        const spent = projectsArr.reduce((sum: number, p: any) => sum + (Number(p?.price) || 0), 0);
+        setTotalSpent(spent);
+
+        setPendingInvoices(0);
+      } catch {
+        if (!mounted) return;
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  const clientInitials = String(clientName || "Client")
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const projectProgressData = projects
+    .slice(0, 4)
+    .map((p: any) => {
+      const status = String(p?.status || "Open");
+      const rawProgress = typeof p?.progress === "number" ? Number(p.progress) : status.toLowerCase() === "completed" ? 100 : 0;
+      const progress = Math.max(0, Math.min(100, isNaN(rawProgress) ? 0 : rawProgress));
+      return {
+        name: String(p?.title || "Project"),
+        progress,
+        status,
+      };
+    });
+
+  const recentTickets = [...tickets]
+    .sort((a: any, b: any) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
+    .slice(0, 3)
+    .map((t: any) => {
+      const no = t?.ticketNo != null ? String(t.ticketNo) : "";
+      const id = no ? `TK-${no.padStart(3, "0")}` : String(t?._id || "").slice(0, 8);
+      const statusRaw = String(t?.status || "open").toLowerCase();
+      const status = statusRaw === "closed" ? "Closed" : statusRaw === "open" ? "Pending" : "In Progress";
+      const date = t?.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : "";
+      return { id, title: String(t?.title || "Ticket"), status, date };
+    });
+
+  const handleProjectRequest = async () => {
+    if (!projectForm.title.trim() || !projectForm.description.trim()) {
+      toast.error("Title and description are required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/client/project-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(projectForm),
+      });
+      if (!res.ok) throw new Error((await res.json())?.error || "Failed to submit request");
+      toast.success("Project request submitted successfully!");
+      setProjectRequestOpen(false);
+      setProjectForm({ title: "", description: "", budget: "", deadline: "" });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to submit request");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateTicket = async () => {
+    if (!ticketForm.title.trim() || !ticketForm.description.trim()) {
+      toast.error("Title and description are required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const headers = getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/client/tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(ticketForm),
+      });
+      if (!res.ok) throw new Error((await res.json())?.error || "Failed to create ticket");
+      toast.success("Ticket created successfully!");
+      setTicketOpen(false);
+      setTicketForm({ title: "", description: "", priority: "medium" });
+      // Refresh tickets
+      const ticketsRes = await fetch(`${API_BASE}/api/client/tickets`, { headers });
+      if (ticketsRes.ok) {
+        const ticketsJson = await ticketsRes.json();
+        setTickets(Array.isArray(ticketsJson) ? ticketsJson : []);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create ticket");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openMessages = () => navigate("/client/messages");
+  const openTickets = () => navigate("/client/tickets");
+  const openInvoices = () => navigate("/invoices");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -98,12 +238,12 @@ export default function ClientDashboard() {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2">Welcome back, Sarah!</h1>
+            <h1 className="text-2xl font-bold mb-2">Welcome back, {clientName}!</h1>
             <p className="text-blue-100">Here's what's happening with your projects today.</p>
           </div>
           <Avatar className="h-16 w-16 border-2 border-white">
-            <AvatarImage src="/api/placeholder/64/64" alt="Client" />
-            <AvatarFallback className="bg-white text-blue-600 text-xl">SC</AvatarFallback>
+            <AvatarImage src={clientAvatar ? `${API_BASE}${clientAvatar}` : "/api/placeholder/64/64"} alt="Client" />
+            <AvatarFallback className="bg-white text-blue-600 text-xl">{clientInitials}</AvatarFallback>
           </Avatar>
         </div>
       </div>
@@ -276,19 +416,128 @@ export default function ClientDashboard() {
               <CardTitle className="text-lg">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start" variant="outline">
-                <Plus className="w-4 h-4 mr-2" />
-                New Project Request
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Ticket className="w-4 h-4 mr-2" />
-                Create Support Ticket
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Dialog open={projectRequestOpen} onOpenChange={setProjectRequestOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full justify-start" variant="outline">
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Project Request
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>New Project Request</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="project-title">Title</Label>
+                      <Input
+                        id="project-title"
+                        value={projectForm.title}
+                        onChange={(e) => setProjectForm({ ...projectForm, title: e.target.value })}
+                        placeholder="Enter project title"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="project-description">Description</Label>
+                      <Textarea
+                        id="project-description"
+                        value={projectForm.description}
+                        onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                        placeholder="Describe your project requirements"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="project-budget">Budget (optional)</Label>
+                      <Input
+                        id="project-budget"
+                        value={projectForm.budget}
+                        onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
+                        placeholder="e.g., $5,000"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="project-deadline">Deadline (optional)</Label>
+                      <Input
+                        id="project-deadline"
+                        type="date"
+                        value={projectForm.deadline}
+                        onChange={(e) => setProjectForm({ ...projectForm, deadline: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleProjectRequest} disabled={submitting} className="flex-1">
+                        {submitting ? "Submitting..." : "Submit Request"}
+                      </Button>
+                      <Button variant="outline" onClick={() => setProjectRequestOpen(false)} className="flex-1">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={ticketOpen} onOpenChange={setTicketOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full justify-start" variant="outline">
+                    <Ticket className="w-4 h-4 mr-2" />
+                    Create Support Ticket
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create Support Ticket</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="ticket-title">Title</Label>
+                      <Input
+                        id="ticket-title"
+                        value={ticketForm.title}
+                        onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })}
+                        placeholder="Brief description of the issue"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ticket-description">Description</Label>
+                      <Textarea
+                        id="ticket-description"
+                        value={ticketForm.description}
+                        onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })}
+                        placeholder="Provide detailed information about your issue"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ticket-priority">Priority</Label>
+                      <Select value={ticketForm.priority} onValueChange={(v) => setTicketForm({ ...ticketForm, priority: v })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleCreateTicket} disabled={submitting} className="flex-1">
+                        {submitting ? "Creating..." : "Create Ticket"}
+                      </Button>
+                      <Button variant="outline" onClick={() => setTicketOpen(false)} className="flex-1">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Button className="w-full justify-start" variant="outline" onClick={openMessages}>
                 <MessageSquare className="w-4 h-4 mr-2" />
                 Send Message
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start" variant="outline" onClick={openInvoices}>
                 <FileText className="w-4 h-4 mr-2" />
                 View Invoices
               </Button>

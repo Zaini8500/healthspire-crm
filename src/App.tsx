@@ -9,6 +9,11 @@ import Dashboard from "./pages/Dashboard";
 import ClientDashboard from "./pages/dashboard/ClientDashboard";
 import TeamMemberDashboard from "./pages/dashboard/TeamMemberDashboard";
 import MarketerDashboard from "./pages/dashboard/MarketerDashboard";
+import ClientTickets from "./pages/client/ClientTickets";
+import ClientTicketDetails from "./pages/client/ClientTicketDetails";
+import ClientAnnouncements from "./pages/client/ClientAnnouncements";
+import ClientMessages from "./pages/client/ClientMessages.tsx";
+import ClientProjectRequests from "./pages/client/ProjectRequests";
 import Events from "./pages/events/Events";
 import Clients from "./pages/clients/Clients";
 import ClientDetails from "./pages/clients/ClientDetails";
@@ -142,7 +147,7 @@ const RoleGuard = ({ children }: { children: React.ReactNode }) => {
   if (role === "admin") return <>{children}</>;
 
   if (role === "client") {
-    const allowed = new Set(["client_portal", "messages", "tickets", "announcements", "dashboard"]);
+    const allowed = new Set(["client_portal", "messages", "dashboard"]);
     if (allowed.has(moduleKey)) return <>{children}</>;
     return <Navigate to="/client" replace />;
   }
@@ -314,8 +319,16 @@ const App = () => (
             {/* Portals */}
 <<<<<<< HEAD
             <Route path="/client" element={<ClientDashboard />} />
+<<<<<<< Updated upstream
 =======
 >>>>>>> 730fa665efcb7325c76fac1f1d5c841e9f138166
+=======
+            <Route path="/client/messages" element={<ClientMessages />} />
+            <Route path="/client/announcements" element={<ClientAnnouncements />} />
+            <Route path="/client/tickets" element={<ClientTickets />} />
+            <Route path="/client/tickets/:id" element={<ClientTicketDetails />} />
+            <Route path="/client/project-requests" element={<ClientProjectRequests />} />
+>>>>>>> Stashed changes
             <Route path="/admin" element={<Dashboard />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:section" element={<SettingsPage />} />

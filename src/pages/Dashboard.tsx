@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -138,7 +139,7 @@ export default function Dashboard() {
     (async () => {
       try {
         // Projects
-        const pr = await fetch(`${API_BASE}/api/projects`);
+        const pr = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
         if (pr.ok) {
           const data = await pr.json();
           const list = (Array.isArray(data) ? data : []);
@@ -161,7 +162,7 @@ export default function Dashboard() {
     (async () => {
       try {
         // Tasks
-        const tr = await fetch(`${API_BASE}/api/tasks`);
+        const tr = await fetch(`${API_BASE}/api/tasks`, { headers: getAuthHeaders() });
         if (tr.ok) {
           const data = await tr.json();
           const list = (Array.isArray(data) ? data : []);
@@ -185,7 +186,7 @@ export default function Dashboard() {
     (async () => {
       try {
         // Leaves
-        const lr = await fetch(`${API_BASE}/api/leaves`);
+        const lr = await fetch(`${API_BASE}/api/leaves`, { headers: getAuthHeaders() });
         if (lr.ok) {
           const data = await lr.json();
           const list = (Array.isArray(data) ? data : []);
@@ -201,7 +202,7 @@ export default function Dashboard() {
     (async () => {
       try {
         // Employees count
-        const er = await fetch(`${API_BASE}/api/employees`);
+        const er = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
         if (er.ok) {
           const data = await er.json();
           setTeamMembers(Array.isArray(data)? data.length : 0);

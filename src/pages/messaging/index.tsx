@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,7 +29,9 @@ export default function Messaging() {
   const { toast } = useToast();
   const user = getStoredAuthUser();
   const userId = user?.id || user?._id;
+  const role = user?.role || 'admin';
   const navigate = useNavigate();
+  const location = useLocation();
   
   const {
     conversations,
@@ -41,6 +43,20 @@ export default function Messaging() {
     sendMessage,
     refreshConversations,
   } = useMessaging();
+
+  const conversationIdFromUrl = useMemo(() => {
+    const sp = new URLSearchParams(location.search || '');
+    const v = sp.get('conversationId');
+    return v ? String(v) : '';
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!conversationIdFromUrl) return;
+    const target = conversations.find((c) => c._id === conversationIdFromUrl);
+    if (target && (!selectedConversation || selectedConversation._id !== target._id)) {
+      selectConversation(target._id);
+    }
+  }, [conversationIdFromUrl, conversations, selectedConversation, selectConversation]);
 
   // Handle sending a new message
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -145,24 +161,28 @@ export default function Messaging() {
   return (
     <div className="flex h-[calc(100vh-64px)] bg-white dark:bg-gray-900">
       {/* New Conversation Dialog */}
-      <NewConversation 
-        open={isNewConversationOpen} 
-        onOpenChange={setIsNewConversationOpen} 
-      />
+      {role !== 'client' ? (
+        <NewConversation 
+          open={isNewConversationOpen} 
+          onOpenChange={setIsNewConversationOpen} 
+        />
+      ) : null}
       
       {/* Sidebar */}
       <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Messages</h2>
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              className="h-8 w-8"
-              onClick={() => setIsNewConversationOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+            {role !== 'client' ? (
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8"
+                onClick={() => setIsNewConversationOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

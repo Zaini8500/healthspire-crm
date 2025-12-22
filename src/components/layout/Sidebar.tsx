@@ -112,7 +112,6 @@ const navigation: NavItem[] = [
   { title: "Reports", href: "/reports", icon: BarChart3 },
   { title: "Tickets", href: "/tickets", icon: Ticket },
   { title: "Events", href: "/events", icon: Calendar },
-  { title: "Clients", href: "/clients", icon: Users },
   { title: "Tasks", href: "/tasks", icon: CheckSquare },
   { title: "Messages", href: "/messages", icon: MessageSquare },
   { title: "Announcements", href: "/announcements", icon: Megaphone },
@@ -148,7 +147,61 @@ const navigation: NavItem[] = [
       { title: "Manage Users", href: "/user-management/users" },
     ],
   },
+<<<<<<< Updated upstream
   
+=======
+  {
+    title: "Client portal",
+    href: "/client",
+    icon: Building2,
+    children: [
+      { title: "Messages", href: "/client/messages" },
+      { title: "Announcements", href: "/client/announcements" },
+      { title: "Tickets", href: "/client/tickets" },
+      { title: "Project Requests", href: "/client/project-requests" },
+    ],
+  },
+  {
+    title: "Sales & Prospects",
+    href: "/sales-prospects",
+    icon: Megaphone,
+    children: [
+      // Sales
+      { title: "Invoices", href: "/invoices" },
+      { title: "Orders", href: "/sales/orders" },
+      { title: "Store", href: "/sales/store" },
+      { title: "Payments", href: "/sales/payments" },
+      { title: "Expenses", href: "/sales/expenses" },
+      { title: "Items", href: "/sales/items" },
+      { title: "Contracts", href: "/sales/contracts" },
+      // Prospects
+      { title: "Estimate List", href: "/prospects/estimates" },
+      { title: "Estimate Requests", href: "/prospects/estimate-requests" },
+      { title: "Estimate Forms", href: "/prospects/estimate-forms" },
+      { title: "Proposals", href: "/prospects/proposals" },
+    ],
+  },
+  {
+    title: "Setup",
+    href: "/setup",
+    icon: CheckSquare,
+    children: [
+      { title: "Departments", href: "/hrm/departments" },
+      { title: "Help Categories", href: "/help-support/categories" },
+      { title: "KB Categories", href: "/help-support/knowledge-base/categories" },
+    ],
+  },
+  {
+    title: "Plugins",
+    href: "/plugins",
+    icon: Activity,
+    children: [
+      { title: "Email", href: "/email" },
+      { title: "Video Calls", href: "/calls" },
+      { title: "Calendar", href: "/calendar" },
+    ],
+  },
+>>>>>>> Stashed changes
 
   // User Management just above Settings
   {
@@ -203,9 +256,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (role === "client") {
       const allowedTop = new Set([
         "Dashboard",
-        "Messages",
-        "Announcements",
-        "Tickets",
         "Client portal",
       ]);
       if (allowedTop.has(item.title)) return true;
@@ -220,11 +270,15 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       "CRM",
       "HRM",
       "Projects",
-      "Clients",
       "Tasks",
       "Messages",
       "Announcements",
+      "Subscriptions",
       "Calendar",
+      "Email",
+      "Video Calls",
+      "Notes",
+      "Files",
     ]);
     if (staffTop.has(item.title)) return true;
     // Hide admin configuration areas for staff

@@ -145,6 +145,54 @@ export default function EmployeeProfile() {
     } catch {}
   };
 
+  const onFileUploadPick: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    try {
+      if (!dbId) return;
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("name", f.name);
+      fd.append("employeeId", dbId);
+      const res = await fetch(`${API_BASE}/api/files`, { method: "POST", headers: getAuthHeaders(), body: fd });
+      if (res.ok) {
+        toast.success("File uploaded");
+        const q = fileSearch ? `&q=${encodeURIComponent(fileSearch)}` : "";
+        const r2 = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setFileItems(Array.isArray(d2) ? d2 : []);
+        }
+      } else {
+        toast.error("Failed to upload file");
+      }
+    } catch {
+      toast.error("Failed to upload file");
+    } finally {
+      if (fileUploadRef.current) fileUploadRef.current.value = "";
+    }
+  };
+
+  const deleteFile = async (fileId: string) => {
+    try {
+      if (!dbId) return;
+      const res = await fetch(`${API_BASE}/api/files/${fileId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (res.ok) {
+        toast.success("File deleted");
+        const q = fileSearch ? `&q=${encodeURIComponent(fileSearch)}` : "";
+        const r2 = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setFileItems(Array.isArray(d2) ? d2 : []);
+        }
+      } else {
+        toast.error("Failed to delete file");
+      }
+    } catch {
+      toast.error("Failed to delete file");
+    }
+  };
+
   // Auto-save function
   const autoSave = async (updates: any) => {
     try {
@@ -156,6 +204,105 @@ export default function EmployeeProfile() {
       });
       if (res.ok) {
         window.dispatchEvent(new Event("employeeUpdated"));
+      }
+    } catch {}
+  };
+
+  const saveGeneral = async () => {
+    await autoSave({
+      firstName,
+      lastName,
+      mailingAddress,
+      alternativeAddress,
+      phone,
+      alternativePhone: altPhone,
+      gender,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+      sick,
+    });
+    toast.success("General info saved");
+  };
+
+  const saveSocial = async () => {
+    await autoSave({ socialLinks });
+    toast.success("Social links saved");
+  };
+
+  const saveJobInfo = async () => {
+    await autoSave({
+      role: jobTitle,
+      department: departmentVal,
+      salary: salary ? Number(salary) : undefined,
+      salaryTerm: salaryTerm || undefined,
+      joinDate: dateHire ? new Date(dateHire) : undefined,
+      status: statusVal,
+      location: locationVal,
+    });
+    toast.success("Job info saved");
+  };
+
+  const saveAccount = async () => {
+    await autoSave({
+      email: accountEmail,
+      role: accountRole,
+      disableLogin,
+      markAsInactive,
+      password: password || undefined,
+      reenterPassword: reenterPassword || undefined,
+    });
+    toast.success("Account settings saved");
+  };
+
+  const saveNote = async () => {
+    try {
+      if (!dbId) return;
+      const res = await fetch(`${API_BASE}/api/notes`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ employeeId: dbId, title: noteForm.title, text: noteForm.text }),
+      });
+      if (res.ok) {
+        setNoteOpen(false);
+        setNoteForm({ title: "", text: "" });
+        toast.success("Note saved");
+        const q = noteSearch ? `&q=${encodeURIComponent(noteSearch)}` : "";
+        const r2 = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setNoteItems(Array.isArray(d2) ? d2 : []);
+        }
+      }
+    } catch {}
+  };
+
+  const saveProject = async () => {
+    try {
+      if (!dbId) return;
+      const payload = {
+        employeeId: dbId,
+        title: projectForm.title,
+        client: projectForm.client,
+        price: projectForm.price ? Number(projectForm.price) : 0,
+        start: projectForm.start ? new Date(projectForm.start) : undefined,
+        deadline: projectForm.deadline ? new Date(projectForm.deadline) : undefined,
+        status: projectForm.status,
+      };
+      const res = await fetch(`${API_BASE}/api/projects`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setProjectOpen(false);
+        setProjectForm({ title: "", client: "", price: "", start: "", deadline: "", status: "Open" });
+        toast.success("Project saved");
+        const q = projectSearch ? `&q=${encodeURIComponent(projectSearch)}` : "";
+        const r2 = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setProjectItems(Array.isArray(d2) ? d2 : []);
+        }
       }
     } catch {}
   };

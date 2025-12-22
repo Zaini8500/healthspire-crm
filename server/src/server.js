@@ -43,6 +43,7 @@ import subscriptionLabelsRouter from "./routes/subscriptionLabels.js";
 import messagesRouter from "./routes/messages.js";
 import usersRouter from "./routes/users.js";
 import announcementsRouter from "./routes/announcements.js";
+import clientPortalRouter from "./routes/client.js";
 import authRouter from "./routes/auth.js";
 import estimateFormsRouter from "./routes/estimateForms.js";
 import leadsRouter from "./routes/leads.js";
@@ -141,6 +142,7 @@ app.use("/api/subscription-labels", subscriptionLabelsRouter);
 app.use("/api/subscriptionlabels", subscriptionLabelsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/announcements", announcementsRouter);
+app.use("/api/client", clientPortalRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/estimate-forms", estimateFormsRouter);
 // Backward/alternative path alias to avoid 404s from different frontends
