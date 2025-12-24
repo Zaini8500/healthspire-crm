@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import Notes from "../notes/Notes";
 import Files from "../files/Files";
@@ -31,6 +32,16 @@ export default function ClientDetails() {
   const [events, setEvents] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
 
+  // add dialogs/forms
+  const [openAddProject, setOpenAddProject] = useState(false);
+  const [projectForm, setProjectForm] = useState({ title: "", price: "", start: "", deadline: "", labels: "", description: "" });
+
+  const [openAddEstimate, setOpenAddEstimate] = useState(false);
+  const [estimateForm, setEstimateForm] = useState({ estimateDate: "", validUntil: "", tax: "-", tax2: "-", note: "", advancedAmount: "" });
+
+  const [openAddEvent, setOpenAddEvent] = useState(false);
+  const [eventForm, setEventForm] = useState({ title: "", description: "", date: "", startTime: "", endDate: "", endTime: "", location: "", type: "" });
+
   // editable fields
   const [form, setForm] = useState<any>({});
 
@@ -49,7 +60,15 @@ export default function ClientDetails() {
           const name = row.company || row.person || "";
           // fetch projects filtered by name (projects store client string)
           const resP = await fetch(`${API_BASE}/api/projects?q=${encodeURIComponent(name)}`);
-          setProjects(await resP.json().catch(() => []));
+          try {
+            const pj = await resP.json().catch(() => []);
+            const arr = Array.isArray(pj)
+              ? pj
+              : (Array.isArray((pj as any)?.data) ? (pj as any).data : (Array.isArray((pj as any)?.items) ? (pj as any).items : []));
+            setProjects(arr);
+          } catch {
+            setProjects([]);
+          }
           // fetch estimates filtered by client name
           const resE = await fetch(`${API_BASE}/api/estimates?q=${encodeURIComponent(name)}`);
           setEstimates(await resE.json().catch(() => []));
@@ -102,6 +121,95 @@ export default function ClientDetails() {
     return { totalInvoiced, payments: paid, due };
   }, [invoices, payments]);
 
+  // creators
+  const reloadProjects = async (name: string) => {
+    try {
+      const resP = await fetch(`${API_BASE}/api/projects?q=${encodeURIComponent(name)}`);
+      const pj = await resP.json().catch(() => []);
+      const arr = Array.isArray(pj) ? pj : (Array.isArray((pj as any)?.data) ? (pj as any).data : (Array.isArray((pj as any)?.items) ? (pj as any).items : []));
+      setProjects(arr);
+    } catch { setProjects([]); }
+  };
+
+  const createProject = async () => {
+    if (!client) return;
+    const title = (projectForm.title || "").trim();
+    if (!title) return;
+    try {
+      const payload: any = {
+        title,
+        client: client.company || client.person || "-",
+        clientId: client._id ? String(client._id) : undefined,
+        price: projectForm.price ? Number(projectForm.price) : 0,
+        start: projectForm.start ? new Date(projectForm.start) : undefined,
+        deadline: projectForm.deadline ? new Date(projectForm.deadline) : undefined,
+        status: "Open",
+        labels: projectForm.labels || undefined,
+        description: projectForm.description || undefined,
+      };
+      const r = await fetch(`${API_BASE}/api/projects`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (r.ok) {
+        setOpenAddProject(false);
+        setProjectForm({ title: "", price: "", start: "", deadline: "", labels: "", description: "" });
+        await reloadProjects(payload.client);
+      } else {
+        toast.error("Failed to add project");
+      }
+    } catch { toast.error("Failed to add project"); }
+  };
+
+  const createEstimate = async () => {
+    const payload: any = {
+      client: client?.company || client?.person || "-",
+      estimateDate: estimateForm.estimateDate ? new Date(estimateForm.estimateDate) : undefined,
+      validUntil: estimateForm.validUntil ? new Date(estimateForm.validUntil) : undefined,
+      tax: estimateForm.tax === "-" ? 0 : Number(estimateForm.tax || 0),
+      tax2: estimateForm.tax2 === "-" ? 0 : Number(estimateForm.tax2 || 0),
+      note: estimateForm.note || undefined,
+      advancedAmount: estimateForm.advancedAmount ? Number(estimateForm.advancedAmount) : 0,
+      items: [],
+    };
+    try {
+      const r = await fetch(`${API_BASE}/api/estimates`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (r.ok) {
+        setOpenAddEstimate(false);
+        setEstimateForm({ estimateDate: "", validUntil: "", tax: "-", tax2: "-", note: "", advancedAmount: "" });
+        // reload
+        const resE = await fetch(`${API_BASE}/api/estimates?q=${encodeURIComponent(payload.client)}`);
+        setEstimates(await resE.json().catch(() => []));
+      } else {
+        toast.error("Failed to add estimate");
+      }
+    } catch { toast.error("Failed to add estimate"); }
+  };
+
+  const createEvent = async () => {
+    const title = (eventForm.title || "").trim();
+    if (!title) return;
+    const startIso = eventForm.date ? new Date(`${eventForm.date}T${eventForm.startTime || "00:00"}:00`).toISOString() : undefined;
+    const endIso = eventForm.endDate ? new Date(`${eventForm.endDate}T${eventForm.endTime || "00:00"}:00`).toISOString() : undefined;
+    try {
+      const payload: any = {
+        title,
+        description: eventForm.description || undefined,
+        start: startIso,
+        end: endIso,
+        location: eventForm.location || undefined,
+        type: eventForm.type || undefined,
+        clientId: client?._id ? String(client._id) : undefined,
+      };
+      const r = await fetch(`${API_BASE}/api/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (r.ok) {
+        setOpenAddEvent(false);
+        setEventForm({ title: "", description: "", date: "", startTime: "", endDate: "", endTime: "", location: "", type: "" });
+        // reload events
+        try { const re = await fetch(`${API_BASE}/api/events?clientId=${encodeURIComponent(String(client._id || ""))}`); setEvents(await re.json().catch(()=>[])); } catch {}
+      } else {
+        toast.error("Failed to add event");
+      }
+    } catch { toast.error("Failed to add event"); }
+  };
+
   const saveInfo = async () => {
     if (!client) return;
     try {
@@ -125,40 +233,145 @@ export default function ClientDetails() {
   const displayName = client.company || client.person || "Client";
 
   return (
-    <div className="space-y-4 animate-fade-in p-1 sm:p-2">
+    <div className="space-y-8 animate-fade-in p-1 sm:p-2">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">Client details - {displayName}</div>
         <NavLink to="/clients" className="text-primary text-sm">Back to Clients</NavLink>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat title="Projects" value={projects.length} color="bg-indigo" icon="▦" />
-        <Stat title="Total invoiced" value={`Rs.${totals.totalInvoiced.toLocaleString()}`} color="bg-primary" icon="🧾" />
-        <Stat title="Payments" value={`Rs.${totals.payments.toLocaleString()}`} color="bg-success" icon="✔" />
-        <Stat title="Due" value={`Rs.${totals.due.toLocaleString()}`} color="bg-destructive" icon="⚠" />
-      </div>
-
       <Tabs defaultValue="contacts">
-        <TabsList className="bg-muted/40">
-          <TabsTrigger value="contacts">Contacts</TabsTrigger>
-          <TabsTrigger value="info">Client info</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
-          <TabsTrigger value="estimates">Estimates</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="estimate-requests">Estimate Requests</TabsTrigger>
-          <TabsTrigger value="orders">Orders</TabsTrigger>
-          <TabsTrigger value="contracts">Contracts</TabsTrigger>
-          <TabsTrigger value="proposals">Proposals</TabsTrigger>
-          <TabsTrigger value="tickets">Tickets</TabsTrigger>
-          <TabsTrigger value="notes">Notes</TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-2 mt-4 mb-4">
+          <TabsList className="bg-muted/40">
+            <TabsTrigger value="contacts">Contacts</TabsTrigger>
+            <TabsTrigger value="info">Client info</TabsTrigger>
+          </TabsList>
+          <div />
+        </div>
+
+        {/* Add Project */}
+        <Dialog open={openAddProject} onOpenChange={setOpenAddProject}>
+          <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>Add project</DialogTitle></DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Title</Label>
+                <Input value={projectForm.title} onChange={(e)=>setProjectForm((p)=>({...p, title: e.target.value}))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Price</Label>
+                <Input value={projectForm.price} onChange={(e)=>setProjectForm((p)=>({...p, price: e.target.value}))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Start</Label>
+                <Input type="date" value={projectForm.start} onChange={(e)=>setProjectForm((p)=>({...p, start: e.target.value}))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Deadline</Label>
+                <Input type="date" value={projectForm.deadline} onChange={(e)=>setProjectForm((p)=>({...p, deadline: e.target.value}))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Labels</Label>
+                <Input value={projectForm.labels} onChange={(e)=>setProjectForm((p)=>({...p, labels: e.target.value}))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Description</Label>
+                <Textarea value={projectForm.description} onChange={(e)=>setProjectForm((p)=>({...p, description: e.target.value}))} />
+              </div>
+              <div className="sm:col-span-2 text-xs text-muted-foreground">Client: {client?.company || client?.person || "-"}</div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenAddProject(false)}>Close</Button>
+              <Button onClick={createProject}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Estimate */}
+        <Dialog open={openAddEstimate} onOpenChange={setOpenAddEstimate}>
+          <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>Add estimate</DialogTitle></DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-12">
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Estimate date</div>
+              <div className="sm:col-span-9"><Input type="date" value={estimateForm.estimateDate} onChange={(e)=>setEstimateForm((p)=>({...p, estimateDate: e.target.value}))} /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Valid until</div>
+              <div className="sm:col-span-9"><Input type="date" value={estimateForm.validUntil} onChange={(e)=>setEstimateForm((p)=>({...p, validUntil: e.target.value}))} /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client</div>
+              <div className="sm:col-span-9"><Input value={client?.company || client?.person || "-"} disabled /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">TAX</div>
+              <div className="sm:col-span-9"><Input type="number" value={estimateForm.tax} onChange={(e)=>setEstimateForm((p)=>({...p, tax: e.target.value}))} /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Second TAX</div>
+              <div className="sm:col-span-9"><Input type="number" value={estimateForm.tax2} onChange={(e)=>setEstimateForm((p)=>({...p, tax2: e.target.value}))} /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Note</div>
+              <div className="sm:col-span-9"><Textarea value={estimateForm.note} onChange={(e)=>setEstimateForm((p)=>({...p, note: e.target.value}))} /></div>
+
+              <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Advanced Amount</div>
+              <div className="sm:col-span-9"><Input type="number" value={estimateForm.advancedAmount} onChange={(e)=>setEstimateForm((p)=>({...p, advancedAmount: e.target.value}))} /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenAddEstimate(false)}>Close</Button>
+              <Button onClick={createEstimate}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Event */}
+        <Dialog open={openAddEvent} onOpenChange={setOpenAddEvent}>
+          <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>Add event</DialogTitle></DialogHeader>
+            <div className="grid gap-4">
+              <div className="space-y-1">
+                <Label>Title</Label>
+                <Input value={eventForm.title} onChange={(e)=>setEventForm((p)=>({...p, title: e.target.value}))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Description</Label>
+                <Textarea value={eventForm.description} onChange={(e)=>setEventForm((p)=>({...p, description: e.target.value}))} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Start date</Label>
+                    <Input type="date" value={eventForm.date} onChange={(e)=>setEventForm((p)=>({...p, date: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Start time</Label>
+                    <Input type="time" value={eventForm.startTime} onChange={(e)=>setEventForm((p)=>({...p, startTime: e.target.value}))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>End date</Label>
+                    <Input type="date" value={eventForm.endDate} onChange={(e)=>setEventForm((p)=>({...p, endDate: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>End time</Label>
+                    <Input type="time" value={eventForm.endTime} onChange={(e)=>setEventForm((p)=>({...p, endTime: e.target.value}))} />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Location</Label>
+                  <Input value={eventForm.location} onChange={(e)=>setEventForm((p)=>({...p, location: e.target.value}))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Type</Label>
+                  <Input value={eventForm.type} onChange={(e)=>setEventForm((p)=>({...p, type: e.target.value}))} />
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">Client: {client?.company || client?.person || "-"}</div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenAddEvent(false)}>Close</Button>
+              <Button onClick={createEvent}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="contacts">
           <Card className="p-0 overflow-hidden rounded-xl border">
@@ -226,7 +439,7 @@ export default function ClientDetails() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.map((p:any, idx: number)=> (
+                {(Array.isArray(projects) ? projects : []).map((p:any, idx: number)=> (
                   <TableRow key={String(p._id)}>
                     <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="whitespace-nowrap">{p.title}</TableCell>

@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useRef } from "react";
 
@@ -32,7 +33,41 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-        {active === "general" && (
+      <Tabs defaultValue={active} className="w-full">
+        <TabsList className="grid w-full grid-cols-10">
+          <TabsTrigger value="general" asChild>
+            <Link to="/settings/general">General</Link>
+          </TabsTrigger>
+          <TabsTrigger value="localization" asChild>
+            <Link to="/settings/localization">Localization</Link>
+          </TabsTrigger>
+          <TabsTrigger value="theme" asChild>
+            <Link to="/settings/theme">Theme</Link>
+          </TabsTrigger>
+          <TabsTrigger value="email" asChild>
+            <Link to="/settings/email">Email</Link>
+          </TabsTrigger>
+          <TabsTrigger value="modules" asChild>
+            <Link to="/settings/modules">Modules</Link>
+          </TabsTrigger>
+          <TabsTrigger value="left-menu" asChild>
+            <Link to="/settings/left-menu">Menu</Link>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" asChild>
+            <Link to="/settings/notifications">Notifications</Link>
+          </TabsTrigger>
+          <TabsTrigger value="integration" asChild>
+            <Link to="/settings/integration">Integration</Link>
+          </TabsTrigger>
+          <TabsTrigger value="system" asChild>
+            <Link to="/settings/system">System</Link>
+          </TabsTrigger>
+          <TabsTrigger value="updates" asChild>
+            <Link to="/settings/updates">Updates</Link>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">General</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -45,28 +80,8 @@ export default function SettingsPage() {
                 <Input value={settings.general.logoUrl} onChange={(e)=>saveSection('general', { ...settings.general, logoUrl: e.target.value })} />
               </div>
               <div>
-                <Label>Primary color</Label>
-                <Input type="color" value={settings.general.primaryColor} onChange={(e)=>saveSection('general', { ...settings.general, primaryColor: e.target.value })} />
-              </div>
-              <div>
-                <Label>Accent color</Label>
-                <Input type="color" value={settings.general.accentColor || ''} onChange={(e)=>saveSection('general', { ...settings.general, accentColor: e.target.value })} />
-              </div>
-              <div>
-                <Label>Secondary color</Label>
-                <Input type="color" value={settings.general.secondaryColor || ''} onChange={(e)=>saveSection('general', { ...settings.general, secondaryColor: e.target.value })} />
-              </div>
-              <div>
                 <Label>Favicon URL</Label>
                 <Input value={settings.general.faviconUrl || ''} onChange={(e)=>saveSection('general', { ...settings.general, faviconUrl: e.target.value })} />
-              </div>
-              <div>
-                <Label>Timezone</Label>
-                <Input value={settings.general.timezone} onChange={(e)=>saveSection('general', { ...settings.general, timezone: e.target.value })} />
-              </div>
-              <div>
-                <Label>Date format</Label>
-                <Input value={settings.general.dateFormat} onChange={(e)=>saveSection('general', { ...settings.general, dateFormat: e.target.value })} />
               </div>
               <div>
                 <Label>Domain</Label>
@@ -79,6 +94,14 @@ export default function SettingsPage() {
               <div>
                 <Label>Company phone</Label>
                 <Input value={settings.general.companyPhone || ''} onChange={(e)=>saveSection('general', { ...settings.general, companyPhone: e.target.value })} />
+              </div>
+              <div>
+                <Label>Timezone</Label>
+                <Input value={settings.general.timezone} onChange={(e)=>saveSection('general', { ...settings.general, timezone: e.target.value })} />
+              </div>
+              <div>
+                <Label>Date format</Label>
+                <Input value={settings.general.dateFormat} onChange={(e)=>saveSection('general', { ...settings.general, dateFormat: e.target.value })} />
               </div>
               <div>
                 <Label>Address line 1</Label>
@@ -115,6 +138,60 @@ export default function SettingsPage() {
                 <Label>Login page message</Label>
                 <Textarea value={settings.general.loginMessage || ''} onChange={(e)=>saveSection('general', { ...settings.general, loginMessage: e.target.value })} />
               </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={()=>toast.success('General settings saved')}>Save changes</Button>
+              <Button variant="outline" onClick={()=>{ resetSection('general'); toast.success('General settings reset'); }}>Reset section</Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="theme">
+          <Card className="p-6 space-y-4">
+            <div className="text-lg font-semibold">Theme</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Primary color</Label>
+                <Input type="color" value={settings.general.primaryColor} onChange={(e)=>saveSection('general', { ...settings.general, primaryColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Accent color</Label>
+                <Input type="color" value={settings.general.accentColor || ''} onChange={(e)=>saveSection('general', { ...settings.general, accentColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Secondary color</Label>
+                <Input type="color" value={settings.general.secondaryColor || ''} onChange={(e)=>saveSection('general', { ...settings.general, secondaryColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Font family</Label>
+                <select 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={settings.general.fontFamily || 'Inter'} 
+                  onChange={(e)=>saveSection('general', { ...settings.general, fontFamily: e.target.value })}
+                >
+                  <option value="Inter">Inter</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Open Sans">Open Sans</option>
+                  <option value="Lato">Lato</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Poppins">Poppins</option>
+                  <option value="system-ui">System UI</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Dark mode</div>
+                  <div className="text-xs text-muted-foreground">Use dark theme across the app</div>
+                </div>
+                <Switch checked={!!settings.general.darkMode} onCheckedChange={(v)=>saveSection('general', { ...settings.general, darkMode: Boolean(v) })} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Compact mode</div>
+                  <div className="text-xs text-muted-foreground">Reduce spacing and padding</div>
+                </div>
+                <Switch checked={!!settings.general.compactMode} onCheckedChange={(v)=>saveSection('general', { ...settings.general, compactMode: Boolean(v) })} />
+              </div>
               <div className="col-span-full">
                 <div className="text-xs text-muted-foreground">Preview colors</div>
                 <div className="mt-2 flex items-center gap-3">
@@ -125,13 +202,63 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button onClick={()=>toast.success('General settings saved')}>Save changes</Button>
-              <Button variant="outline" onClick={()=>{ resetSection('general'); toast.success('General settings reset'); }}>Reset section</Button>
+              <Button onClick={()=>toast.success('Theme settings saved')}>Save changes</Button>
+              <Button variant="outline" onClick={()=>{ resetSection('general'); toast.success('Theme settings reset'); }}>Reset section</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "localization" && (
+        <TabsContent value="system">
+          <Card className="p-6 space-y-4">
+            <div className="text-lg font-semibold">System</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Maintenance mode</div>
+                  <div className="text-xs text-muted-foreground">Disable access for non-admins</div>
+                </div>
+                <Switch checked={!!settings.system?.maintenanceMode} onCheckedChange={(v)=>saveSection('system', { ...(settings.system||{}), maintenanceMode: Boolean(v) } as any)} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Debug mode</div>
+                  <div className="text-xs text-muted-foreground">Show detailed error messages</div>
+                </div>
+                <Switch checked={!!settings.system?.debugMode} onCheckedChange={(v)=>saveSection('system', { ...(settings.system||{}), debugMode: Boolean(v) } as any)} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Auto backup</div>
+                  <div className="text-xs text-muted-foreground">Daily database backups</div>
+                </div>
+                <Switch checked={!!settings.system?.autoBackup} onCheckedChange={(v)=>saveSection('system', { ...(settings.system||{}), autoBackup: Boolean(v) } as any)} />
+              </div>
+              <div>
+                <Label>Session timeout (minutes)</Label>
+                <Input type="number" value={(settings.system?.sessionTimeout ?? 120) as any} onChange={(e)=>saveSection('system', { ...(settings.system||{}), sessionTimeout: e.target.value? Number(e.target.value) : 120 } as any)} />
+              </div>
+              <div>
+                <Label>Max upload size (MB)</Label>
+                <Input type="number" value={(settings.system?.maxUploadSize ?? 10) as any} onChange={(e)=>saveSection('system', { ...(settings.system||{}), maxUploadSize: e.target.value? Number(e.target.value) : 10 } as any)} />
+              </div>
+              <div>
+                <Label>Backup retention (days)</Label>
+                <Input type="number" value={(settings.system?.backupRetention ?? 30) as any} onChange={(e)=>saveSection('system', { ...(settings.system||{}), backupRetention: e.target.value? Number(e.target.value) : 30 } as any)} />
+              </div>
+              <div className="col-span-full">
+                <Label>Maintenance message</Label>
+                <Textarea value={settings.system?.maintenanceMessage || ''} onChange={(e)=>saveSection('system', { ...(settings.system||{}), maintenanceMessage: e.target.value } as any)} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={()=>toast.success('System settings saved')}>Save changes</Button>
+              <Button variant="outline" onClick={()=>toast.success('Backup initiated (simulated)')}>Backup now</Button>
+              <Button variant="outline" onClick={()=>{ resetSection('system'); toast.success('System settings reset'); }}>Reset section</Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="localization">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Localization</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -184,9 +311,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>{ resetSection('localization'); toast.success('Localization reset'); }}>Reset section</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "email" && (
+        <TabsContent value="email">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Email (SMTP)</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -247,31 +374,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>{ resetSection('email'); toast.success('Email settings reset'); }}>Reset section</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "templates" && (
-          <Card className="p-6 space-y-4">
-            <div className="text-lg font-semibold">Email templates</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Object.keys(settings.emailTemplates).map((key) => (
-                <div key={key} className="space-y-2">
-                  <div className="text-sm font-medium capitalize">{key}</div>
-                  <Label>Subject</Label>
-                  <Input value={settings.emailTemplates[key].subject} onChange={(e)=>saveSection('emailTemplates', { ...settings.emailTemplates, [key]: { ...settings.emailTemplates[key], subject: e.target.value } })} />
-                  <Label>Body</Label>
-                  <Textarea className="min-h-[120px]" value={settings.emailTemplates[key].body} onChange={(e)=>saveSection('emailTemplates', { ...settings.emailTemplates, [key]: { ...settings.emailTemplates[key], body: e.target.value } })} />
-                  <div className="text-xs text-muted-foreground">{`Variables: {{name}}, {{number}}, {{client}}, {{total}}, {{link}}`}</div>
-                </div>
-              ))}
-            </div>
-            <div className="pt-2 flex gap-2">
-              <Button onClick={()=>toast.success('Templates saved')}>Save templates</Button>
-              <Button variant="outline" onClick={()=>{ resetSection('emailTemplates'); toast.success('Templates reset'); }}>Reset templates</Button>
-            </div>
-          </Card>
-        )}
-
-        {active === "modules" && (
+        <TabsContent value="modules">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Modules</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -290,9 +395,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>{ resetSection('modules'); toast.success('Modules reset'); }}>Reset section</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "left-menu" && (
+        <TabsContent value="left-menu">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Left menu</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -334,9 +439,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>{ resetSection('leftMenu'); toast.success('Left menu reset'); }}>Reset visibility</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "notifications" && (
+        <TabsContent value="notifications">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Notifications</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -399,9 +504,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>{ resetSection('notifications'); toast.success('Notifications reset'); }}>Reset section</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "integration" && (
+        <TabsContent value="integration">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Integration</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -448,33 +553,9 @@ export default function SettingsPage() {
               <Button variant="outline" onClick={()=>toast.success('Twilio test sent (simulated)')}>Test Twilio</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
 
-        {active === "cron" && (
-          <Card className="p-6 space-y-4">
-            <div className="text-lg font-semibold">Cron Job</div>
-            <div className="text-sm text-muted-foreground">Last run: {settings.cron.lastRunAt ? new Date(settings.cron.lastRunAt).toLocaleString() : 'Never'}</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center justify-between rounded-md border p-3">
-                <div>
-                  <div className="text-sm font-medium">Enable cron</div>
-                  <div className="text-xs text-muted-foreground">Allow scheduled tasks</div>
-                </div>
-                <Switch checked={!!settings.cron.enabled} onCheckedChange={(v)=>saveSection('cron', { ...settings.cron, enabled: Boolean(v) })} />
-              </div>
-              <div>
-                <Label>Schedule (cron expression)</Label>
-                <Input placeholder="0 9 * * *" value={settings.cron.schedule || ''} onChange={(e)=>saveSection('cron', { ...settings.cron, schedule: e.target.value })} />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={()=>{ saveSection('cron', { ...settings.cron, lastRunAt: new Date().toISOString() }); toast.success('Cron executed (simulated)'); }}>Run now</Button>
-              <Button variant="outline" onClick={()=>{ resetSection('cron'); toast.success('Cron settings reset'); }}>Reset section</Button>
-            </div>
-          </Card>
-        )}
-
-        {active === "updates" && (
+        <TabsContent value="updates">
           <Card className="p-6 space-y-4">
             <div className="text-lg font-semibold">Updates</div>
             <div className="text-sm">Current version: <span className="font-medium">{settings.meta.version}</span></div>
@@ -487,7 +568,8 @@ export default function SettingsPage() {
               <Button variant="destructive" onClick={()=>{ resetAll(); toast.success('All settings reset to defaults'); }}>Reset all</Button>
             </div>
           </Card>
-        )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

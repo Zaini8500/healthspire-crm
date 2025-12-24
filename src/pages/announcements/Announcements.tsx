@@ -52,6 +52,18 @@ export default function Announcements() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getCurrentUserRole = () => {
+    try {
+      const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!raw) return "admin";
+      const u = JSON.parse(raw);
+      return u?.role || "admin";
+    } catch {
+      return "admin";
+    }
+  };
+  const role = getCurrentUserRole();
+
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
@@ -127,11 +139,12 @@ export default function Announcements() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-medium">Announcements</h1>
-        <Button size="sm" variant="outline" onClick={() => navigate("/announcements/new")}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add announcement
-        </Button>
+        {role === "admin" && (
+          <Button size="sm" variant="outline" onClick={() => navigate("/announcements/new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add announcement
+          </Button>
+        )}
       </div>
 
       <Card>

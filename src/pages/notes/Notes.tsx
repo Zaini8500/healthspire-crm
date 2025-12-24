@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Tags, Plus, RefreshCw, MoreHorizontal, Clock, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -78,7 +79,20 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
   const [noteCategory, setNoteCategory] = useState("-");
   const [noteLabel, setNoteLabel] = useState("-");
 
-  const canUseContext = Boolean(leadId || clientId);
+  // Determine self context for staff (team member)
+  const getCurrentUserRole = () => {
+    try {
+      const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!raw) return "admin";
+      const u = JSON.parse(raw);
+      return u?.role || "admin";
+    } catch {
+      return "admin";
+    }
+  };
+  const currentUserRole = getCurrentUserRole();
+  const [selfEmployeeId, setSelfEmployeeId] = useState<string>("");
+  const canUseContext = Boolean(leadId || clientId || selfEmployeeId);
 
   const labelColorByName = useMemo(() => {
     const m = new Map<string, string>();
@@ -117,7 +131,7 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
   }, []);
 
   const loadNotes = async () => {
-    if (!leadId && !clientId) {
+    if (!leadId && !clientId && !selfEmployeeId) {
       setNotes([]);
       return;
     }
@@ -126,6 +140,7 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
       const params = new URLSearchParams();
       if (leadId) params.set("leadId", leadId);
       if (clientId) params.set("clientId", clientId);
+      if (selfEmployeeId) params.set("employeeId", selfEmployeeId);
       if (query.trim()) params.set("q", query.trim());
       const res = await fetch(`${API_BASE}/api/notes?${params.toString()}`);
       const json = await res.json().catch(() => null);
@@ -214,7 +229,7 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
   useEffect(() => {
     loadNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadId, clientId]);
+  }, [leadId, clientId, selfEmployeeId]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -223,6 +238,23 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  // Resolve employeeId for staff self mode
+  useEffect(() => {
+    (async () => {
+      try {
+        if (currentUserRole !== "staff") return;
+        if (leadId || clientId) return;
+        const res = await fetch(`${API_BASE}/api/attendance/members`, { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => []);
+        const first = Array.isArray(data) ? data[0] : null;
+        const eid = first?.employeeId ? String(first.employeeId) : "";
+        if (eid) setSelfEmployeeId(eid);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredNotes = useMemo(() => {
     let list = notes;
@@ -254,8 +286,8 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
   };
 
   const saveNote = async () => {
-    if (!leadId && !clientId) {
-      toast.error("Open a client or lead first");
+    if (!leadId && !clientId && !selfEmployeeId) {
+      toast.error("Open a valid context first");
       return;
     }
     const t = noteTitle.trim();
@@ -267,6 +299,7 @@ export default function Notes({ leadId, clientId }: { leadId?: string; clientId?
       const payload: any = {
         leadId: leadId || undefined,
         clientId: clientId || undefined,
+        employeeId: selfEmployeeId || undefined,
         title: t,
         text: noteText || "",
         category: noteCategory !== "-" && noteCategory !== "- Category -" ? noteCategory : "",

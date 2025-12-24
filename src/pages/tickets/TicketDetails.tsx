@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle2, MoreHorizontal, Paperclip, Send, Tags } from "lucide-react";
 import { toast } from "sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -119,7 +120,7 @@ export default function TicketDetails() {
     if (!id) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/tickets/${id}`);
+      const res = await fetch(`${API_BASE}/api/tickets/${id}`, { headers: getAuthHeaders() });
       const text = await res.text().catch(() => "");
       const json = text ? (() => {
         try {
@@ -142,7 +143,7 @@ export default function TicketDetails() {
 
   const loadTicketLabels = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/ticket-labels`);
+      const res = await fetch(`${API_BASE}/api/ticket-labels`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load labels");
       setTicketLabels(Array.isArray(json) ? json : []);
@@ -155,7 +156,7 @@ export default function TicketDetails() {
     if (!id) return;
     try {
       setLoadingTasks(true);
-      const res = await fetch(`${API_BASE}/api/tasks?ticketId=${encodeURIComponent(id)}`);
+      const res = await fetch(`${API_BASE}/api/tasks?ticketId=${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load tasks");
       setTasks(Array.isArray(json) ? json : []);
@@ -170,7 +171,7 @@ export default function TicketDetails() {
     if (!id) return;
     try {
       setLoadingFiles(true);
-      const res = await fetch(`${API_BASE}/api/files?ticketId=${encodeURIComponent(id)}`);
+      const res = await fetch(`${API_BASE}/api/files?ticketId=${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load files");
       setFiles(Array.isArray(json) ? json : []);
@@ -186,7 +187,7 @@ export default function TicketDetails() {
       setLoadingTemplates(true);
       const t = (typeArg || "").toString().trim();
       const qs = t ? `?type=${encodeURIComponent(t)}` : "";
-      const res = await fetch(`${API_BASE}/api/ticket-templates${qs}`);
+      const res = await fetch(`${API_BASE}/api/ticket-templates${qs}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load templates");
       setTemplates(Array.isArray(json) ? json : []);
@@ -241,7 +242,7 @@ export default function TicketDetails() {
       setSavingTemplate(true);
       const res = await fetch(`${API_BASE}/api/ticket-templates`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name, body, type }),
       });
       const json = await res.json().catch(() => null);
@@ -262,7 +263,8 @@ export default function TicketDetails() {
     const ok = window.confirm("Delete this template?");
     if (!ok) return;
     try {
-      const res = await fetch(`${API_BASE}/api/ticket-templates/${idToDelete}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/ticket-templates/${idToDelete}`, { method: "DELETE", headers: getAuthHeaders() });
+
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to delete template");
       toast.success("Template deleted");
@@ -278,7 +280,7 @@ export default function TicketDetails() {
       const nextStatus = (ticket.status || "open") === "closed" ? "open" : "closed";
       const res = await fetch(`${API_BASE}/api/tickets/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: nextStatus, lastActivity: new Date().toISOString() }),
       });
       const json = await res.json().catch(() => null);
@@ -300,7 +302,7 @@ export default function TicketDetails() {
       const next = current.includes(name) ? current : [...current, name];
       const res = await fetch(`${API_BASE}/api/tickets/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ labels: next, lastActivity: new Date().toISOString() }),
       });
       const json = await res.json().catch(() => null);
@@ -335,7 +337,7 @@ export default function TicketDetails() {
       setSavingEdit(true);
       const res = await fetch(`${API_BASE}/api/tickets/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           title,
           description: editDescription || "",
@@ -359,7 +361,8 @@ export default function TicketDetails() {
   const openMergeDialog = async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${API_BASE}/api/tickets`);
+      const res = await fetch(`${API_BASE}/api/tickets`, { headers: getAuthHeaders() });
+
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load tickets");
       const items = Array.isArray(json) ? json : [];
@@ -381,7 +384,7 @@ export default function TicketDetails() {
       setMerging(true);
       const res = await fetch(`${API_BASE}/api/tickets/${id}/merge`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ sourceId: mergeSourceId }),
       });
       const json = await res.json().catch(() => null);
@@ -409,7 +412,7 @@ export default function TicketDetails() {
       setAddingTask(true);
       const res = await fetch(`${API_BASE}/api/tasks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ title, ticketId: id, status: "todo", priority: "medium" }),
       });
       const json = await res.json().catch(() => null);
@@ -436,7 +439,7 @@ export default function TicketDetails() {
         form.append("file", f);
         form.append("ticketId", id);
         // eslint-disable-next-line no-await-in-loop
-        const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: form });
+        const res = await fetch(`${API_BASE}/api/files`, { method: "POST", headers: getAuthHeaders(), body: form });
         // eslint-disable-next-line no-await-in-loop
         const json = await res.json().catch(() => null);
         if (!res.ok) throw new Error(json?.error || "Failed to upload");
@@ -458,7 +461,7 @@ export default function TicketDetails() {
       setSending(true);
       const res = await fetch(`${API_BASE}/api/tickets/${id}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ text, createdBy: "" }),
       });
       const json = await res.json().catch(() => null);
@@ -485,7 +488,7 @@ export default function TicketDetails() {
       const title = `${ticket.ticketNo ? `Ticket #${ticket.ticketNo}` : "Ticket"}${ticket.title ? ` - ${ticket.title}` : ""}`.trim();
       const res = await fetch(`${API_BASE}/api/notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ title, text, private: true }),
       });
       const json = await res.json().catch(() => null);

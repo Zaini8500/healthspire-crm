@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ignore environment files and server uploads
+.env
+.env.*
+server/.env
+server/.env.*
+server/uploads/
+
+# Ignore vite timestamp artifacts
+*.timestamp-*.mjs

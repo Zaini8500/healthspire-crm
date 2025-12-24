@@ -14,6 +14,7 @@ import { NavLink } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -208,7 +209,7 @@ export default function Clients() {
     (async () => {
       try {
         const url = `${API_BASE}/api/clients${q ? `?q=${encodeURIComponent(q)}` : ""}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         setClientsData(Array.isArray(data) ? data : []);
@@ -230,7 +231,7 @@ export default function Clients() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/projects`);
+        const res = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         const list = (Array.isArray(data) ? data : []);
@@ -362,55 +363,6 @@ export default function Clients() {
               <Button variant="outline">- Quick filters -</Button>
             </div>
             <div className="flex items-center gap-2">
-              <Dialog open={openLabels} onOpenChange={setOpenLabels}>
-                <DialogTrigger asChild>
-                  <Button variant="outline"><Tags className="w-4 h-4 mr-2"/>Manage labels</Button>
-                </DialogTrigger>
-                <ManageLabelsDialog labels={labels} onSave={(l)=>{ saveLabels(l); setOpenLabels(false); }} />
-              </Dialog>
-              <Dialog open={openImport} onOpenChange={setOpenImport}>
-                <DialogTrigger asChild>
-                  <Button variant="outline"><Upload className="w-4 h-4 mr-2"/>Import clients</Button>
-                </DialogTrigger>
-                <ImportClientsDialog onImported={(list)=>{ handleImported(list); setOpenImport(false); }} />
-              </Dialog>
-              <Dialog open={openAdd} onOpenChange={setOpenAdd}>
-                <DialogTrigger asChild>
-                  <Button variant="gradient"><Plus className="w-4 h-4 mr-2"/>Add client</Button>
-                </DialogTrigger>
-                <AddClientDialog onAdd={async (c, opts)=>{
-                  try {
-                    const payload: any = {
-                      type: c.company ? "org" : "person",
-                      company: c.company || undefined,
-                      person: c.person || undefined,
-                      owner: c.owner || undefined,
-                      address: c.address || undefined,
-                      city: c.city || undefined,
-                      state: c.state || undefined,
-                      zip: c.zip || undefined,
-                      country: c.country || undefined,
-                      email: c.email || undefined,
-                      phone: c.phone || undefined,
-                      website: c.website || undefined,
-                      vatNumber: c.vatNumber || undefined,
-                      gstNumber: c.gstNumber || undefined,
-                      clientGroups: c.clientGroups?.filter(Boolean) || [],
-                      currency: c.currency || undefined,
-                      currencySymbol: c.currencySymbol || undefined,
-                      labels: c.labels?.filter(Boolean) || [],
-                      disableOnlinePayment: Boolean(c.disableOnlinePayment),
-                    };
-                    const res = await fetch(`${API_BASE}/api/clients`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-                    if (!res.ok) { const e = await res.json().catch(()=>null); toast.error(e?.error || "Failed to add client"); return; }
-                    const d = await res.json();
-                    const row: ContactRow = { id: String(d._id||""), name: d.company || d.person || "New Client", client: d.company || d.person || "-", email: d.email || c.email, phone: d.phone || c.phone };
-                    setContacts((prev)=> [row, ...prev]);
-                    if (opts?.close !== false) setOpenAdd(false);
-                    toast.success("Client added");
-                  } catch {}
-                }} />
-              </Dialog>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input className="pl-9 w-64" placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} />
@@ -804,7 +756,7 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
     // Load employees for account manager dropdown
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/employees`);
+        const res = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json().catch(() => []);
         const mapped = (Array.isArray(data) ? data : []).map((e: any) => ({
@@ -887,7 +839,7 @@ function AddClientDialog({ onAdd }: { onAdd: (payload: { company?: string; perso
                     <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>
                   ))
                 ) : (
-                  <SelectItem value="" disabled>No employees found</SelectItem>
+                  <SelectItem value="__none__" disabled>No employees found</SelectItem>
                 )}
               </SelectContent>
             </Select>

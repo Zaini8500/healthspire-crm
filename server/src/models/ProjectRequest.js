@@ -1,10 +1,14 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const projectRequestSchema = new mongoose.Schema({
   clientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
     required: true,
+  },
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Project",
   },
   title: {
     type: String,
@@ -43,4 +47,5 @@ projectRequestSchema.pre("save", function (next) {
   next();
 });
 
-module.exports = mongoose.model("ProjectRequest", projectRequestSchema);
+const ProjectRequest = mongoose.models.ProjectRequest || mongoose.model("ProjectRequest", projectRequestSchema);
+export default ProjectRequest;

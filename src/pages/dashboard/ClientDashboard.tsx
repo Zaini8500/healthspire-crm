@@ -229,7 +229,7 @@ export default function ClientDashboard() {
   };
 
   const openMessages = () => navigate("/client/messages");
-  const openTickets = () => navigate("/client/tickets");
+  const openTicketsPage = () => navigate("/client/tickets");
   const openInvoices = () => navigate("/invoices");
 
   return (
@@ -241,7 +241,7 @@ export default function ClientDashboard() {
             <h1 className="text-2xl font-bold mb-2">Welcome back, {clientName}!</h1>
             <p className="text-blue-100">Here's what's happening with your projects today.</p>
           </div>
-          <Avatar className="h-16 w-16 border-2 border-white">
+          <Avatar className="h-16 w-16 border-2 border-white bg-white">
             <AvatarImage src={clientAvatar ? `${API_BASE}${clientAvatar}` : "/api/placeholder/64/64"} alt="Client" />
             <AvatarFallback className="bg-white text-blue-600 text-xl">{clientInitials}</AvatarFallback>
           </Avatar>

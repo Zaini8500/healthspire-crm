@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { CheckCircle2, Edit, MoreHorizontal, Plus, RefreshCw, Search, Settings, Tags, Trash2, Paperclip, Mic } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -81,7 +82,7 @@ export default function Tickets() {
 
   const loadClients = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/clients`);
+      const res = await fetch(`${API_BASE}/api/clients`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load clients");
       setClients(Array.isArray(json) ? json : []);
@@ -92,7 +93,7 @@ export default function Tickets() {
 
   const loadEmployees = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/employees`);
+      const res = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load employees");
       setEmployees(Array.isArray(json) ? json : []);
@@ -103,7 +104,7 @@ export default function Tickets() {
 
   const loadTicketLabels = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/ticket-labels`);
+      const res = await fetch(`${API_BASE}/api/ticket-labels`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load labels");
       setTicketLabels(Array.isArray(json) ? json : []);
@@ -118,7 +119,7 @@ export default function Tickets() {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       if (client !== "-") params.set("clientId", client);
-      const res = await fetch(`${API_BASE}/api/tickets?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/api/tickets?${params.toString()}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to load tickets");
       setTickets(Array.isArray(json) ? json : []);
@@ -206,7 +207,7 @@ export default function Tickets() {
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
@@ -224,15 +225,15 @@ export default function Tickets() {
     try {
       const res = await fetch(`${API_BASE}/api/tickets/${t._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: nextStatus, lastActivity: new Date().toISOString() }),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "Failed to update ticket");
-      toast.success(nextStatus === "closed" ? "Marked as Closed" : "Marked as Open");
+      if (!res.ok) throw new Error(json?.error || "Failed to update status");
+      toast.success("Status updated");
       await loadTickets();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to update ticket");
+      toast.error(e?.message || "Failed to update status");
     }
   };
 
@@ -240,13 +241,13 @@ export default function Tickets() {
     const ok = window.confirm("Delete this ticket?");
     if (!ok) return;
     try {
-      const res = await fetch(`${API_BASE}/api/tickets/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/tickets/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to delete");
       toast.success("Ticket deleted");
       await loadTickets();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to delete ticket");
+      toast.error(e?.message || "Failed to delete");
     }
   };
 
@@ -256,16 +257,16 @@ export default function Tickets() {
     try {
       const res = await fetch(`${API_BASE}/api/ticket-labels`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name, color: selectedColor }),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "Failed to add label");
-      toast.success("Label saved");
+      if (!res.ok) throw new Error(json?.error || "Failed");
+      toast.success("Label created");
       setNewLabelName("");
       await loadTicketLabels();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to save label");
+      toast.error(e?.message || "Failed");
     }
   };
 
@@ -273,13 +274,13 @@ export default function Tickets() {
     const ok = window.confirm("Delete this label?");
     if (!ok) return;
     try {
-      const res = await fetch(`${API_BASE}/api/ticket-labels/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/ticket-labels/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       toast.success("Label deleted");
       await loadTicketLabels();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to delete label");
+      toast.error(e?.message || "Failed");
     }
   };
 

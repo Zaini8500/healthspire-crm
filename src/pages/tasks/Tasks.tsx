@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
-import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag } from "lucide-react";
+import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag, Clock, MessageSquare, Users, Calendar, Flag, Link2 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
@@ -64,6 +64,18 @@ export default function Tasks() {
   const [items, setItems] = useState<TaskDoc[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
+  const getCurrentUserRole = () => {
+    try {
+      const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!raw) return "admin";
+      const u = JSON.parse(raw);
+      return u?.role || "admin";
+    } catch {
+      return "admin";
+    }
+  };
+  const currentUserRole = getCurrentUserRole();
+  const canManage = currentUserRole === "admin";
 
   const [view, setView] = useState<"list" | "kanban" | "gantt">("list");
 
@@ -110,6 +122,15 @@ export default function Tasks() {
   const [openTaskInfo, setOpenTaskInfo] = useState(false);
   const [taskInfo, setTaskInfo] = useState<TaskDoc | null>(null);
   const [taskInfoLoading, setTaskInfoLoading] = useState(false);
+  const [editingTask, setEditingTask] = useState(false);
+  const [taskForm, setTaskForm] = useState<Partial<TaskDoc>>({});
+  const [timeTracking, setTimeTracking] = useState<{ isRunning: boolean; startTime: number | null; elapsed: number; manualHours: string }>({
+    isRunning: false,
+    startTime: null,
+    elapsed: 0,
+    manualHours: "",
+  });
+  const [attachments, setAttachments] = useState<Array<{ _id?: string; name?: string; url?: string; path?: string }>>([]);
 
   const [checklistDraft, setChecklistDraft] = useState("");
   const [subTaskDraft, setSubTaskDraft] = useState("");
@@ -128,7 +149,7 @@ export default function Tasks() {
   const [depBlocking, setDepBlocking] = useState<string>("");
   const [taskUploading, setTaskUploading] = useState(false);
   const [taskSelectedFiles, setTaskSelectedFiles] = useState<File[]>([]);
-  const [taskForm, setTaskForm] = useState({
+  const [addTaskForm, setAddTaskForm] = useState({
     title: "",
     description: "",
     points: "1",
@@ -143,7 +164,7 @@ export default function Tasks() {
 
   const resetTaskForm = () => {
     setEditingTaskId("");
-    setTaskForm({
+    setAddTaskForm({
       title: "",
       description: "",
       points: "1",
@@ -218,24 +239,24 @@ export default function Tasks() {
   };
 
   const saveTask = async (mode: "save" | "save_show") => {
-    const title = (taskForm.title || "").trim();
+    const title = (addTaskForm.title || "").trim();
     if (!title) return;
 
     const attachmentsUploaded = await uploadTaskFiles();
     const payload: any = {
       title,
-      description: (taskForm.description || "").trim() || undefined,
-      points: taskForm.points ? Number(taskForm.points) : undefined,
-      status: taskForm.status,
-      priority: taskForm.priority,
-      start: taskForm.start || undefined,
-      deadline: taskForm.deadline || undefined,
-      assignees: taskForm.assignTo ? [{ name: taskForm.assignTo, initials: taskForm.assignTo.slice(0, 2).toUpperCase() }] : [],
-      collaborators: (taskForm.collaborators || "")
+      description: (addTaskForm.description || "").trim() || undefined,
+      points: addTaskForm.points ? Number(addTaskForm.points) : undefined,
+      status: addTaskForm.status,
+      priority: addTaskForm.priority,
+      start: addTaskForm.start || undefined,
+      deadline: addTaskForm.deadline || undefined,
+      assignees: addTaskForm.assignTo ? [{ name: addTaskForm.assignTo, initials: addTaskForm.assignTo.slice(0, 2).toUpperCase() }] : [],
+      collaborators: (addTaskForm.collaborators || "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
-      tags: (taskForm.labels || "")
+      tags: (addTaskForm.labels || "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
@@ -403,6 +424,7 @@ export default function Tasks() {
     const prevStatus = prev?.status || "todo";
     if ((prevStatus || "").toLowerCase() === nextStatus.toLowerCase()) return;
 
+    // Optimistic UI update
     setItems((p) => p.map((x) => (x._id === taskId ? { ...x, status: nextStatus } : x)));
 
     try {
@@ -414,11 +436,14 @@ export default function Tasks() {
       if (r.ok) {
         const updated = await r.json();
         setItems((p) => p.map((x) => (x._id === taskId ? updated : x)));
+        toast.success("Task status updated");
         return;
       }
     } catch {
+      toast.error("Failed to update status");
     }
 
+    // Revert on error
     setItems((p) => p.map((x) => (x._id === taskId ? { ...x, status: prevStatus } : x)));
   };
 
@@ -467,19 +492,18 @@ export default function Tasks() {
 
   const handleEdit = (t: TaskDoc) => {
     setEditingTaskId(t._id);
-    setTaskForm({
+    setAddTaskForm({
       title: t.title || "",
       description: t.description || "",
       points: "1",
-      assignTo: t.assignees?.[0]?.name || "",
+      assignTo: (t.assignees || [])[0]?.name || "",
       collaborators: (t.collaborators || []).join(", "),
       status: t.status || "todo",
       priority: t.priority || "medium",
       labels: (t.tags || []).join(", "),
-      start: t.start ? new Date(t.start).toISOString().slice(0, 10) : "",
-      deadline: t.deadline ? new Date(t.deadline).toISOString().slice(0, 10) : "",
+      start: t.start || "",
+      deadline: t.deadline || "",
     });
-    setTaskSelectedFiles([]);
     setOpenAddTask(true);
   };
 
@@ -705,85 +729,30 @@ export default function Tasks() {
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="text-lg font-semibold">Tasks</div>
-                <TabsList className="bg-muted/40">
-                  <TabsTrigger value="list">List</TabsTrigger>
-                  <TabsTrigger value="kanban">Kanban</TabsTrigger>
-                  <TabsTrigger value="gantt">Gantt</TabsTrigger>
+                <div className="text-2xl font-bold">Tasks</div>
+                <TabsList className="bg-muted/60">
+                  <TabsTrigger value="list" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">List</TabsTrigger>
+                  <TabsTrigger value="kanban" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Kanban</TabsTrigger>
+                  <TabsTrigger value="gantt" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Gantt</TabsTrigger>
                 </TabsList>
               </div>
               <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={() => { void loadLabels(); setOpenManageLabels(true); }}>
-                  <Tag className="w-4 h-4 mr-2" />
-                  Manage labels
+                {canManage && (
+                  <Button type="button" variant="outline" onClick={() => { void loadLabels(); setOpenManageLabels(true); }} className="gap-2">
+                    <Tag className="w-4 h-4" />
+                    Manage labels
+                  </Button>
+                )}
+                <Button type="button" variant="outline" onClick={() => load()} disabled={loading} className="gap-2">
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 </Button>
-                <Button type="button" variant="outline" onClick={() => load()} disabled={loading}>
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
-                <Button type="button" onClick={() => { resetTaskForm(); setOpenAddTask(true); }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add task
-                </Button>
+                {canManage && (
+                  <Button type="button" onClick={() => { resetTaskForm(); setOpenAddTask(true); }} className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add task
+                  </Button>
+                )}
               </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-end">
-              <Input className="w-64" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-6 gap-2">
-              <Select value={filters.status || "__any__"} onValueChange={(v) => setFilters((p) => ({ ...p, status: v === "__any__" ? "" : v }))}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__any__">- Status -</SelectItem>
-                  <SelectItem value="backlog">Backlog</SelectItem>
-                  <SelectItem value="todo">To do</SelectItem>
-                  <SelectItem value="in-progress">In progress</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
-                  <SelectItem value="done">Done</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filters.priority || "__any__"} onValueChange={(v) => setFilters((p) => ({ ...p, priority: v === "__any__" ? "" : v }))}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Priority" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__any__">- Priority -</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Minor</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filters.assignedTo || "__any__"} onValueChange={(v) => setFilters((p) => ({ ...p, assignedTo: v === "__any__" ? "" : v }))}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Assigned to" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__any__">- Assigned to -</SelectItem>
-                  {employeeNames.map((n) => (
-                    <SelectItem key={n} value={n}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={filters.tag || "__any__"} onValueChange={(v) => setFilters((p) => ({ ...p, tag: v === "__any__" ? "" : v }))}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Label" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__any__">- Label -</SelectItem>
-                  {labels.map((l) => (
-                    <SelectItem key={l._id} value={l.name}>{l.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input className="h-9" type="date" value={filters.deadlineFrom} onChange={(e) => setFilters((p) => ({ ...p, deadlineFrom: e.target.value }))} />
-              <Input className="h-9" type="date" value={filters.deadlineTo} onChange={(e) => setFilters((p) => ({ ...p, deadlineTo: e.target.value }))} />
-            </div>
-
-            <div className="mt-2 flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => {
-                setFilters({ status: "", priority: "", assignedTo: "", tag: "", deadlineFrom: "", deadlineTo: "" });
-                window.setTimeout(() => load({ status: "", priority: "", assignedTo: "", tag: "", deadlineFrom: "", deadlineTo: "" }), 0);
-              }}>Clear</Button>
-              <Button type="button" onClick={() => load()}>Apply</Button>
             </div>
           </CardHeader>
 
@@ -854,12 +823,16 @@ export default function Tasks() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
-                            <Button type="button" size="icon" variant="ghost" onClick={() => handleEdit(t)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => handleDelete(t)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {canManage && (
+                              <>
+                                <Button type="button" size="icon" variant="ghost" onClick={() => handleEdit(t)}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button type="button" size="icon" variant="ghost" onClick={() => handleDelete(t)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -931,12 +904,16 @@ export default function Tasks() {
                               </button>
 
                               <div className="flex items-center gap-1">
-                                <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleEdit(t); }} aria-label="Edit">
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                                <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleDelete(t); }} aria-label="Delete">
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {canManage && (
+                                  <>
+                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleEdit(t); }} aria-label="Edit">
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleDelete(t); }} aria-label="Delete">
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -1039,15 +1016,15 @@ export default function Tasks() {
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Title</div>
-              <Input className="sm:col-span-4" placeholder="Title" value={taskForm.title} onChange={(e)=>setTaskForm((p)=>({ ...p, title: e.target.value }))} />
+              <Input className="sm:col-span-4" placeholder="Title" value={addTaskForm.title} onChange={(e)=>setAddTaskForm((p)=>({ ...p, title: e.target.value }))} />
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-start">
               <div className="text-sm text-muted-foreground sm:col-span-1">Description</div>
-              <Textarea className="sm:col-span-4" placeholder="Description" value={taskForm.description} onChange={(e)=>setTaskForm((p)=>({ ...p, description: e.target.value }))} />
+              <Textarea className="sm:col-span-4" placeholder="Description" value={addTaskForm.description} onChange={(e)=>setAddTaskForm((p)=>({ ...p, description: e.target.value }))} />
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Points</div>
-              <Select value={taskForm.points} onValueChange={(v)=>setTaskForm((p)=>({ ...p, points: v }))}>
+              <Select value={addTaskForm.points} onValueChange={(v)=>setAddTaskForm((p)=>({ ...p, points: v }))}>
                 <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="1 Point"/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1">1 Point</SelectItem>
@@ -1060,7 +1037,7 @@ export default function Tasks() {
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Assign to</div>
-              <Select value={taskForm.assignTo || "__none__"} onValueChange={(v)=>setTaskForm((p)=>({ ...p, assignTo: v === "__none__" ? "" : v }))}>
+              <Select value={addTaskForm.assignTo || "__none__"} onValueChange={(v)=>setAddTaskForm((p)=>({ ...p, assignTo: v === "__none__" ? "" : v }))}>
                 <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="Mindspire tech"/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">-</SelectItem>
@@ -1076,8 +1053,8 @@ export default function Tasks() {
                 <Input
                   list="tasks-module-collaborators"
                   placeholder="Collaborators (comma separated)"
-                  value={taskForm.collaborators}
-                  onChange={(e)=>setTaskForm((p)=>({ ...p, collaborators: e.target.value }))}
+                  value={addTaskForm.collaborators}
+                  onChange={(e)=>setAddTaskForm((p)=>({ ...p, collaborators: e.target.value }))}
                 />
                 <datalist id="tasks-module-collaborators">
                   {employeeNames.map((n) => (
@@ -1088,7 +1065,7 @@ export default function Tasks() {
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Status</div>
-              <Select value={taskForm.status} onValueChange={(v)=>setTaskForm((p)=>({ ...p, status: v }))}>
+              <Select value={addTaskForm.status} onValueChange={(v)=>setAddTaskForm((p)=>({ ...p, status: v }))}>
                 <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="To do"/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todo">To do</SelectItem>
@@ -1099,27 +1076,27 @@ export default function Tasks() {
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Priority</div>
-              <Select value={taskForm.priority} onValueChange={(v)=>setTaskForm((p)=>({ ...p, priority: v }))}>
+              <Select value={addTaskForm.priority} onValueChange={(v)=>setAddTaskForm((p)=>({ ...p, priority: v }))}>
                 <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="Priority"/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="urgent">Urgent</SelectItem>
                   <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Minor</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Labels</div>
-              <Input className="sm:col-span-4" placeholder="Labels" value={taskForm.labels} onChange={(e)=>setTaskForm((p)=>({ ...p, labels: e.target.value }))} />
+              <Input className="sm:col-span-4" placeholder="Labels" value={addTaskForm.labels} onChange={(e)=>setAddTaskForm((p)=>({ ...p, labels: e.target.value }))} />
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Start date</div>
-              <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={taskForm.start} onChange={(e)=>setTaskForm((p)=>({ ...p, start: e.target.value }))} />
+              <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={addTaskForm.start} onChange={(e)=>setAddTaskForm((p)=>({ ...p, start: e.target.value }))} />
             </div>
             <div className="grid gap-2 sm:grid-cols-5 items-center">
               <div className="text-sm text-muted-foreground sm:col-span-1">Deadline</div>
-              <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={taskForm.deadline} onChange={(e)=>setTaskForm((p)=>({ ...p, deadline: e.target.value }))} />
+              <Input className="sm:col-span-4" type="date" placeholder="YYYY-MM-DD" value={addTaskForm.deadline} onChange={(e)=>setAddTaskForm((p)=>({ ...p, deadline: e.target.value }))} />
             </div>
           </div>
 
@@ -1230,7 +1207,16 @@ export default function Tasks() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-8 space-y-4">
                 <div className="space-y-1">
-                  <div className="text-sm font-medium truncate">{taskInfo?.title || "-"}</div>
+                  {editingTask ? (
+                    <Input
+                      value={taskForm.title || ""}
+                      onChange={(e) => setTaskForm((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="Task title"
+                      className="text-sm font-medium"
+                    />
+                  ) : (
+                    <div className="text-sm font-medium truncate">{taskInfo?.title || "-"}</div>
+                  )}
                   {taskInfoLoading ? (
                     <div className="text-xs text-muted-foreground">Loading...</div>
                   ) : null}
@@ -1307,24 +1293,35 @@ export default function Tasks() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">Sub tasks</div>
-                  <div className="space-y-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Subtasks</div>
+                    <div className="text-xs text-muted-foreground">
+                      {taskInfo?.subTasks?.filter((x) => x.done).length || 0}/{taskInfo?.subTasks?.length || 0}
+                    </div>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all"
+                      style={{
+                        width: `${taskInfo?.subTasks?.length ? (taskInfo.subTasks.filter((x) => x.done).length / taskInfo.subTasks.length) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
                     {(taskInfo?.subTasks || []).map((st, idx) => (
-                      <div key={st._id || String(idx)} className="flex items-center justify-between gap-2">
-                        <label className="flex items-center gap-2 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={!!st.done}
-                            onChange={async () => {
-                              if (!taskInfo?._id) return;
-                              const next = (taskInfo.subTasks || []).map((x, i) => (i === idx ? { ...x, done: !x.done } : x));
-                              const r = await updateTask(taskInfo._id, { subTasks: next });
-                              if (r.ok) void pushActivity(taskInfo._id, `Updated sub task`);
-                            }}
-                          />
-                          <span className={st.done ? "line-through text-muted-foreground truncate" : "truncate"}>{st.title || "-"}</span>
-                        </label>
+                      <div key={st._id || String(idx)} className="flex items-center gap-2 p-2 rounded border bg-card">
+                        <input
+                          type="checkbox"
+                          checked={!!st.done}
+                          onChange={async () => {
+                            if (!taskInfo?._id) return;
+                            const next = (taskInfo.subTasks || []).map((x, i) => (i === idx ? { ...x, done: !x.done } : x));
+                            const r = await updateTask(taskInfo._id, { subTasks: next });
+                            if (r.ok) void pushActivity(taskInfo._id, `Updated subtask: ${st.title}`);
+                          }}
+                        />
+                        <span className={`text-sm flex-1 ${st.done ? "line-through text-muted-foreground" : ""}`}>{st.title || "-"}</span>
                         <Button
                           type="button"
                           size="icon"
@@ -1333,91 +1330,132 @@ export default function Tasks() {
                             if (!taskInfo?._id) return;
                             const next = (taskInfo.subTasks || []).filter((_, i) => i !== idx);
                             const r = await updateTask(taskInfo._id, { subTasks: next });
-                            if (r.ok) void pushActivity(taskInfo._id, `Removed sub task`);
+                            if (r.ok) void pushActivity(taskInfo._id, `Removed subtask`);
                           }}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
                     ))}
-
-                    <Input placeholder="Create a sub task" value={subTaskDraft} onChange={(e) => setSubTaskDraft(e.target.value)} />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        onClick={async () => {
-                          const title = (subTaskDraft || "").trim();
-                          if (!title || !taskInfo?._id) return;
-                          const next = [{ title, done: false }, ...(taskInfo.subTasks || [])];
-                          const r = await updateTask(taskInfo._id, { subTasks: next });
-                          if (r.ok) {
-                            setSubTaskDraft("");
-                            void pushActivity(taskInfo._id, `Added sub task`);
-                          }
-                        }}
-                      >
-                        Create
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => setSubTaskDraft("")}>Cancel</Button>
-                    </div>
-
-                    <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => setDepOpen((s) => !s)}>
-                      Add dependency
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="Create a sub task" value={subTaskDraft} onChange={(e) => setSubTaskDraft(e.target.value)} className="h-8 text-sm" />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={async () => {
+                        const title = (subTaskDraft || "").trim();
+                        if (!title || !taskInfo?._id) return;
+                        const next = [{ title, done: false }, ...(taskInfo.subTasks || [])];
+                        const r = await updateTask(taskInfo._id, { subTasks: next });
+                        if (r.ok) {
+                          setSubTaskDraft("");
+                          void pushActivity(taskInfo._id, `Added subtask: ${title}`);
+                        }
+                      }}
+                    >
+                      Add
                     </Button>
-
-                    {depOpen ? (
-                      <div className="border rounded-md p-3 space-y-2">
-                        <div className="text-xs text-muted-foreground">This task blocked by</div>
-                        <Select value={depBlockedBy || "__none__"} onValueChange={(v) => setDepBlockedBy(v === "__none__" ? "" : v)}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Select task" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">-</SelectItem>
-                            {rows.filter((x) => x._id !== taskInfo?._id).slice(0, 50).map((t) => (
-                              <SelectItem key={t._id} value={t._id}>{t.taskNo ? `#${t.taskNo}` : ""} {t.title || "Task"}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <div className="text-xs text-muted-foreground">This task blocking</div>
-                        <Select value={depBlocking || "__none__"} onValueChange={(v) => setDepBlocking(v === "__none__" ? "" : v)}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Select task" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">-</SelectItem>
-                            {rows.filter((x) => x._id !== taskInfo?._id).slice(0, 50).map((t) => (
-                              <SelectItem key={t._id} value={t._id}>{t.taskNo ? `#${t.taskNo}` : ""} {t.title || "Task"}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            onClick={async () => {
-                              if (!taskInfo?._id) return;
-                              const next = {
-                                blockedBy: depBlockedBy ? [depBlockedBy] : [],
-                                blocking: depBlocking ? [depBlocking] : [],
-                              };
-                              const r = await updateTask(taskInfo._id, { dependencies: next });
-                              if (r.ok) {
-                                void pushActivity(taskInfo._id, `Updated dependencies`);
-                                setDepOpen(false);
-                              }
-                            }}
-                          >
-                            Add
-                          </Button>
-                          <Button type="button" variant="outline" onClick={() => { setDepOpen(false); setDepBlockedBy(""); setDepBlocking(""); }}>Cancel</Button>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Description</div>
-                  <div className="text-sm whitespace-pre-wrap">{taskInfo?.description || "-"}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Description</div>
+                    {!editingTask && (
+                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => { setEditingTask(true); setTaskForm({ title: taskInfo?.title || "", description: taskInfo?.description || "", status: taskInfo?.status || "", priority: taskInfo?.priority || "", start: taskInfo?.start || "", deadline: taskInfo?.deadline || "" }); }}>
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  {editingTask ? (
+                    <Textarea
+                      value={taskForm.description || ""}
+                      onChange={(e) => setTaskForm((p) => ({ ...p, description: e.target.value }))}
+                      placeholder="Task description"
+                      rows={3}
+                      className="text-sm"
+                    />
+                  ) : (
+                    <div className="text-sm whitespace-pre-wrap">{taskInfo?.description || "-"}</div>
+                  )}
                 </div>
+
+                {editingTask && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Status</div>
+                      <Select value={taskForm.status || ""} onValueChange={(v) => setTaskForm((p) => ({ ...p, status: v }))}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="backlog">Backlog</SelectItem>
+                          <SelectItem value="todo">To do</SelectItem>
+                          <SelectItem value="in-progress">In progress</SelectItem>
+                          <SelectItem value="review">Review</SelectItem>
+                          <SelectItem value="done">Done</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Priority</div>
+                      <Select value={taskForm.priority || ""} onValueChange={(v) => setTaskForm((p) => ({ ...p, priority: v }))}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Priority" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Start date</div>
+                      <Input
+                        type="date"
+                        value={taskForm.start ? new Date(taskForm.start).toISOString().split('T')[0] : ""}
+                        onChange={(e) => setTaskForm((p) => ({ ...p, start: e.target.value }))}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Deadline</div>
+                      <Input
+                        type="date"
+                        value={taskForm.deadline ? new Date(taskForm.deadline).toISOString().split('T')[0] : ""}
+                        onChange={(e) => setTaskForm((p) => ({ ...p, deadline: e.target.value }))}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {editingTask && (
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        if (!taskInfo?._id) return;
+                        const r = await updateTask(taskInfo._id, {
+                          title: taskForm.title,
+                          description: taskForm.description,
+                          status: taskForm.status,
+                          priority: taskForm.priority,
+                          start: taskForm.start,
+                          deadline: taskForm.deadline,
+                        });
+                        if (r.ok) {
+                          setEditingTask(false);
+                          toast.success("Task updated");
+                        }
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingTask(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <div className="text-xs text-muted-foreground">Write a comment...</div>
@@ -1479,6 +1517,60 @@ export default function Tasks() {
                   <Separator />
 
                   <div className="space-y-2">
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      Attachments
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        multiple
+                        onChange={async (e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length || !taskInfo?._id) return;
+                          const formData = new FormData();
+                          files.forEach((f) => formData.append("files", f));
+                          formData.append("taskId", taskInfo._id);
+                          try {
+                            const res = await fetch(`${API_BASE}/api/files`, {
+                              method: "POST",
+                              headers: { Authorization: getAuthHeaders().Authorization },
+                              body: formData,
+                            });
+                            if (res.ok) {
+                              const uploaded = await res.json();
+                              const newFiles = Array.isArray(uploaded) ? uploaded : [uploaded];
+                              setAttachments((p) => [...p, ...newFiles]);
+                              toast.success(`${files.length} file(s) uploaded`);
+                            } else {
+                              toast.error("Upload failed");
+                            }
+                          } catch {
+                            toast.error("Upload failed");
+                          }
+                          (e.target as any).value = "";
+                        }}
+                      />
+                      <div className="space-y-1">
+                        {attachments.map((att) => {
+                          const href = att.url || (att.path ? `${API_BASE}${att.path.startsWith("/") ? "" : "/"}${att.path}` : "#");
+                          return (
+                            <a key={att._id || att.name} href={href} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
+                              <Paperclip className="w-3 h-3" />
+                              {att.name || "File"}
+                            </a>
+                          );
+                        })}
+                        {!attachments.length && (
+                          <div className="text-xs text-muted-foreground">No attachments yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
                     <div className="text-sm font-medium">Activity</div>
                     {(taskInfo?.activity || []).length ? (
                       <div className="space-y-2">
@@ -1516,6 +1608,74 @@ export default function Tasks() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-3">
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Time Tracking
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={timeTracking.isRunning ? "destructive" : "default"}
+                        onClick={() => {
+                          if (timeTracking.isRunning) {
+                            // Stop timer
+                            const totalElapsed = timeTracking.elapsed + (Date.now() - (timeTracking.startTime || 0));
+                            setTimeTracking((p) => ({ ...p, isRunning: false, startTime: null, elapsed: totalElapsed }));
+                            toast.success(`Timer stopped: ${Math.floor(totalElapsed / 60000)}m ${Math.floor((totalElapsed % 60000) / 1000)}s`);
+                          } else {
+                            // Start timer
+                            setTimeTracking((p) => ({ ...p, isRunning: true, startTime: Date.now() }));
+                            toast.success("Timer started");
+                          }
+                        }}
+                      >
+                        {timeTracking.isRunning ? "Stop" : "Start"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setTimeTracking((p) => ({ ...p, isRunning: false, startTime: null, elapsed: 0 }))}
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {timeTracking.isRunning
+                        ? `Running: ${Math.floor((timeTracking.elapsed + (Date.now() - (timeTracking.startTime || 0)) / 1000) / 60)}m`
+                        : `Total: ${Math.floor(timeTracking.elapsed / 60000)}m ${Math.floor((timeTracking.elapsed % 60000) / 1000)}s`}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Manual hours (e.g., 2.5)"
+                        value={timeTracking.manualHours}
+                        onChange={(e) => setTimeTracking((p) => ({ ...p, manualHours: e.target.value }))}
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const hours = parseFloat(timeTracking.manualHours);
+                          if (!isNaN(hours) && hours > 0 && taskInfo?._id) {
+                            const ms = hours * 3600000;
+                            setTimeTracking((p) => ({ ...p, elapsed: p.elapsed + ms, manualHours: "" }));
+                            toast.success(`Added ${hours}h to time tracking`);
+                          }
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
@@ -1698,4 +1858,4 @@ export default function Tasks() {
       </Dialog>
     </div>
   );
-}
+};

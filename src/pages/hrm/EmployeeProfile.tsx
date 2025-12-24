@@ -145,6 +145,20 @@ export default function EmployeeProfile() {
     } catch {}
   };
 
+  const deleteProject = async (id: string) => {
+    try {
+      if (!dbId) return;
+      await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      const q = projectSearch ? `&q=${encodeURIComponent(projectSearch)}` : "";
+      const r2 = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setProjectItems(Array.isArray(d2) ? d2 : []);
+      }
+      toast.success("Project removed");
+    } catch {}
+  };
+
   const onFileUploadPick: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     try {
       if (!dbId) return;
@@ -272,6 +286,20 @@ export default function EmployeeProfile() {
           setNoteItems(Array.isArray(d2) ? d2 : []);
         }
       }
+    } catch {}
+  };
+
+  const deleteNote = async (id: string) => {
+    try {
+      if (!dbId) return;
+      await fetch(`${API_BASE}/api/notes/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      const q = noteSearch ? `&q=${encodeURIComponent(noteSearch)}` : "";
+      const r2 = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setNoteItems(Array.isArray(d2) ? d2 : []);
+      }
+      toast.success("Note removed");
     } catch {}
   };
 
@@ -473,219 +501,6 @@ export default function EmployeeProfile() {
       } catch {}
     })();
   }, [dbId, expenseSearch]);
-
-  const saveGeneral = async () => {
-    try {
-      if (!dbId) return;
-      const payload = {
-        firstName,
-        lastName,
-        mailingAddress,
-        alternativeAddress,
-        phone,
-        alternativePhone: altPhone,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        sick,
-        gender,
-      };
-      const res = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        window.dispatchEvent(new Event("employeeUpdated"));
-        toast.success("General info saved");
-      }
-    } catch {}
-  };
-
-  const saveSocial = async () => {
-    try {
-      if (!dbId) return;
-      const res = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ socialLinks }),
-      });
-      if (res.ok) {
-        window.dispatchEvent(new Event("employeeUpdated"));
-        toast.success("Social links saved");
-      }
-    } catch {}
-  };
-
-  const saveJobInfo = async () => {
-    try {
-      if (!dbId) return;
-      const payload = {
-        role: jobTitle,
-        department: departmentVal,
-        salary: salary ? Number(salary) : undefined,
-        salaryTerm: salaryTerm || undefined,
-        joinDate: dateHire ? new Date(dateHire) : undefined,
-        status: statusVal,
-        location: locationVal,
-      };
-      const res = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        window.dispatchEvent(new Event("employeeUpdated"));
-        toast.success("Job info saved");
-      }
-    } catch {}
-  };
-
-  const saveAccount = async () => {
-    try {
-      if (!dbId) return;
-      const payload = {
-        email: accountEmail,
-        password: password || undefined,
-        role: accountRole,
-        disableLogin,
-        markAsInactive,
-      };
-      const res = await fetch(`${API_BASE}/api/employees/${dbId}`, {
-        method: "PUT",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        window.dispatchEvent(new Event("employeeUpdated"));
-        toast.success("Account settings saved");
-      }
-    } catch {}
-  };
-
-  const onFileUploadPick: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    (async () => {
-      try {
-        if (!dbId) return;
-        const formData = new FormData();
-        formData.append("file", f);
-        const res = await fetch(`${API_BASE}/api/files`, {
-          method: "POST",
-          headers: { Authorization: getAuthHeaders().Authorization },
-          body: formData,
-        });
-        if (res.ok) {
-          const q = fileSearch ? `&q=${encodeURIComponent(fileSearch)}` : "";
-          const r2 = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-          if (r2.ok) {
-            const d2 = await r2.json();
-            setFileItems(Array.isArray(d2) ? d2 : []);
-          }
-          toast.success("File uploaded");
-        }
-      } catch {}
-    })();
-  };
-
-  const deleteFile = async (id: string) => {
-    try {
-      if (!dbId) return;
-      await fetch(`${API_BASE}/api/files/${id}`, { method: "DELETE", headers: getAuthHeaders() });
-      const q = fileSearch ? `&q=${encodeURIComponent(fileSearch)}` : "";
-      const r2 = await fetch(`${API_BASE}/api/files?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        setFileItems(Array.isArray(d2) ? d2 : []);
-      }
-      toast.success("File removed");
-    } catch {}
-  };
-
-  const saveNote = async () => {
-    try {
-      if (!dbId) return;
-      const payload = {
-        employeeId: dbId,
-        title: noteForm.title,
-        text: noteForm.text,
-      };
-      const res = await fetch(`${API_BASE}/api/notes`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        setNoteOpen(false);
-        setNoteForm({ title: "", text: "" });
-        const q = noteSearch ? `&q=${encodeURIComponent(noteSearch)}` : "";
-        const r2 = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-        if (r2.ok) {
-          const d2 = await r2.json();
-          setNoteItems(Array.isArray(d2) ? d2 : []);
-        }
-        toast.success("Note added");
-      }
-    } catch {}
-  };
-
-  const deleteNote = async (id: string) => {
-    try {
-      if (!dbId) return;
-      await fetch(`${API_BASE}/api/notes/${id}`, { method: "DELETE", headers: getAuthHeaders() });
-      const q = noteSearch ? `&q=${encodeURIComponent(noteSearch)}` : "";
-      const r2 = await fetch(`${API_BASE}/api/notes?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        setNoteItems(Array.isArray(d2) ? d2 : []);
-      }
-      toast.success("Note removed");
-    } catch {}
-  };
-
-  const saveProject = async () => {
-    try {
-      if (!dbId) return;
-      const payload = {
-        employeeId: dbId,
-        title: projectForm.title,
-        client: projectForm.client,
-        price: projectForm.price ? Number(projectForm.price) : 0,
-        start: projectForm.start ? new Date(projectForm.start) : undefined,
-        deadline: projectForm.deadline ? new Date(projectForm.deadline) : undefined,
-        status: projectForm.status,
-      };
-      const res = await fetch(`${API_BASE}/api/projects`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        setProjectOpen(false);
-        setProjectForm({ title: "", client: "", price: "", start: "", deadline: "", status: "Open" });
-        const q = projectSearch ? `&q=${encodeURIComponent(projectSearch)}` : "";
-        const r2 = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-        if (r2.ok) {
-          const d2 = await r2.json();
-          setProjectItems(Array.isArray(d2) ? d2 : []);
-        }
-        toast.success("Project added");
-      }
-    } catch {}
-  };
-
-  const deleteProject = async (id: string) => {
-    try {
-      if (!dbId) return;
-      await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE", headers: getAuthHeaders() });
-      const q = projectSearch ? `&q=${encodeURIComponent(projectSearch)}` : "";
-      const r2 = await fetch(`${API_BASE}/api/projects?employeeId=${dbId}${q}`, { headers: getAuthHeaders() });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        setProjectItems(Array.isArray(d2) ? d2 : []);
-      }
-      toast.success("Project removed");
-    } catch {}
-  };
 
   const saveExpense = async () => {
     try {

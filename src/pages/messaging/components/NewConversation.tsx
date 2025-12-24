@@ -29,13 +29,13 @@ export const NewConversation: React.FC<{
     queryKey: ['users', searchQuery],
     queryFn: async () => {
       const response = await fetch(
-        `http://localhost:5000/api/users?search=${encodeURIComponent(searchQuery)}`,
+        `http://localhost:5000/api/users?search=${encodeURIComponent(searchQuery)}&limit=50`,
         { headers: getAuthHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
-    enabled: searchQuery.length > 1,
+    enabled: open,
   });
 
   const handleSelectUser = (user: User) => {

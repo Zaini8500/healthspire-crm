@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Calendar, Filter, Plus, Search, Upload, Tags, Paperclip, MoreVertical, Eye, Pencil, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 import { useNavigate } from "react-router-dom";
 
@@ -68,7 +69,7 @@ export default function Overview() {
     (async () => {
       try {
         const url = `${API_BASE}/api/projects${query ? `?q=${encodeURIComponent(query)}` : ""}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const mapped: Row[] = (Array.isArray(data) ? data : []).map((d: any) => ({
@@ -93,7 +94,7 @@ export default function Overview() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/clients`);
+        const res = await fetch(`${API_BASE}/api/clients`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         const opts: { id: string; name: string }[] = (Array.isArray(data) ? data : [])
@@ -139,7 +140,7 @@ export default function Overview() {
       const method = editingId ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -170,7 +171,7 @@ export default function Overview() {
 
         // Lightweight refetch to ensure fresh list without manual reload
         try {
-          const ref = await fetch(`${API_BASE}/api/projects`);
+          const ref = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
           if (ref.ok) {
             const data = await ref.json();
             const mapped: Row[] = (Array.isArray(data) ? data : []).map((d: any) => ({
@@ -196,7 +197,7 @@ export default function Overview() {
   const deleteProject = async (id: string) => {
     try {
       if (!window.confirm("Delete this project?")) return;
-      await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE" });
+      await fetch(`${API_BASE}/api/projects/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       setRows((prev) => prev.filter((r) => r.id !== id));
       toast.success("Project removed");
     } catch {}
@@ -206,7 +207,7 @@ export default function Overview() {
     try {
       const res = await fetch(`${API_BASE}/api/projects/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
@@ -241,7 +242,7 @@ export default function Overview() {
     try {
       const res = await fetch(`${API_BASE}/api/projects/${progressProjectId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ progress: value }),
       });
       if (res.ok) {
@@ -354,11 +355,11 @@ export default function Overview() {
           deadline: d ? new Date(d) : undefined,
           status: st || "Open",
         };
-        const res = await fetch(`${API_BASE}/api/projects`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const res = await fetch(`${API_BASE}/api/projects`, { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(payload) });
         if (res.ok) imported++;
       }
       toast.success(`Imported ${imported} project(s)`);
-      const ref = await fetch(`${API_BASE}/api/projects${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+      const ref = await fetch(`${API_BASE}/api/projects${query ? `?q=${encodeURIComponent(query)}` : ""}`, { headers: getAuthHeaders() });
       if (ref.ok) {
         const data = await ref.json();
         const mapped: Row[] = (Array.isArray(data) ? data : []).map((d: any) => ({

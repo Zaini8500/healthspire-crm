@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Client from "../models/Client.js";
 import Employee from "../models/Employee.js";
+import Conversation from "../models/Conversation.js";
+import Message from "../models/Message.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
@@ -212,6 +214,55 @@ router.post("/client/register", async (req, res) => {
       clientId: clientDoc._id,
       createdBy: "self-signup",
     });
+
+    // Send welcome message from an admin to the new client (best-effort)
+    try {
+      const admin = await User.findOne({ role: { $regex: /^admin$/i }, status: { $regex: /^active$/i } })
+        .sort({ createdAt: 1 })
+        .select("_id")
+        .lean();
+      if (admin?._id) {
+        const participants = [admin._id, userDoc._id];
+        let conversation = await Conversation.findOne({
+          $and: [
+            {
+              $or: [
+                { projectId: { $exists: false } },
+                { projectId: null },
+              ],
+            },
+            { participants: { $all: participants, $size: 2 } },
+          ],
+        }).lean(false);
+
+        if (!conversation) {
+          conversation = await Conversation.create({
+            participants,
+            isGroup: false,
+            createdBy: admin._id,
+            admins: [admin._id],
+          });
+        }
+
+        const displayName = String(personName || company || "").trim() || "there";
+        const content = `Welcome to HealthSpire! 👋\n\nHello ${displayName},\n\nThank you for signing up with HealthSpire. We’re excited to have you on board.\n\nOur team is here to support you with your healthcare software needs. Please let us know how we can help you today—whether it’s onboarding, customization, or any questions you may have.\n\nBest regards,\nHealthSpire Admin Team`;
+
+        const created = await Message.create({
+          conversationId: conversation._id,
+          sender: admin._id,
+          content,
+          attachments: [],
+          readBy: [admin._id],
+        });
+
+        await Conversation.updateOne(
+          { _id: conversation._id },
+          { $set: { lastMessage: created._id }, $currentDate: { updatedAt: true } }
+        ).catch(() => {});
+      }
+    } catch {
+      // best-effort
+    }
 
     if (autoLogin) {
       const token = jwt.sign({ uid: userDoc._id, role: userDoc.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });

@@ -6,6 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import ReportsNav from "../ReportsNav";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 export default function LeadsConversions() {
   const [owner, setOwner] = useState("-");
@@ -22,7 +23,7 @@ export default function LeadsConversions() {
     const load = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${API_BASE}/api/leads`);
+        const res = await fetch(`${API_BASE}/api/leads`, { headers: getAuthHeaders() });
         const data = res.ok ? await res.json() : [];
         setLeads(Array.isArray(data) ? data : []);
       } finally {

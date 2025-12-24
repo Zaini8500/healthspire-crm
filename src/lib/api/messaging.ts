@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000';
+export const API_BASE = 'http://localhost:5000';
 
 export interface Message {
   _id: string;
@@ -11,14 +11,19 @@ export interface Message {
   };
   content: string;
   readBy: string[];
-  attachments: Array<{
-    url: string;
-    name: string;
-    type: string;
-    size: number;
-  }>;
+  // Support both object attachments and legacy string[] URLs
+  attachments: Array<
+    | {
+        url: string;
+        name: string;
+        type: string;
+        size: number;
+      }
+    | string
+  >;
   createdAt: string;
   updatedAt: string;
+  isDeleted?: boolean;
 }
 
 export interface Conversation {
@@ -33,6 +38,7 @@ export interface Conversation {
   lastMessage?: Message;
   isGroup: boolean;
   groupName?: string;
+  admins?: string[];
   unreadCount?: number;
   updatedAt: string;
 }
@@ -125,7 +131,8 @@ export const sendMessage = async (
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || 'Failed to send message');
+    const msg = error.error || error.message || `Failed to send message (${response.status})`;
+    throw new Error(msg);
   }
   
   return response.json();
@@ -145,22 +152,66 @@ export const markMessagesAsRead = async (messageIds: string[]): Promise<{ succes
   return response.json();
 };
 
-export const uploadAttachment = async (file: File): Promise<{ url: string }> => {
+export const uploadAttachment = async (file: File): Promise<{ url: string; name?: string; type?: string; size?: number }> => {
   const formData = new FormData();
   formData.append('file', file);
-  
-  const response = await fetch(`${API_BASE}/api/upload`, {
-    method: 'POST',
-    headers: {
-      'Authorization': getAuthHeaders().Authorization,
-    },
-    body: formData,
+
+  // Prefer server files route, fallback to legacy /api/upload if present
+  const endpoints = [`${API_BASE}/api/files`, `${API_BASE}/api/upload`];
+  let lastError: any = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': getAuthHeaders().Authorization },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        lastError = new Error(err.error || err.message || `Upload failed (${res.status})`);
+        continue;
+      }
+      const json = await res.json();
+      const rawUrl = json.url || json.path;
+      const normalizedUrl = rawUrl && typeof rawUrl === 'string'
+        ? (rawUrl.startsWith('/') ? `${API_BASE}${rawUrl}` : rawUrl)
+        : '';
+      return {
+        url: normalizedUrl,
+        name: json.name || file.name,
+        type: json.type || file.type,
+        size: typeof json.size === 'number' ? json.size : file.size,
+      };
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error('Failed to upload attachment');
+};
+
+export const editMessage = async (messageId: string, content: string): Promise<Message> => {
+  const response = await fetch(`${API_BASE}/api/messages/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ content }),
   });
-  
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || 'Failed to upload attachment');
+    throw new Error(error.error || error.message || 'Failed to edit message');
   }
-  
+  return response.json();
+};
+
+export const deleteMessage = async (messageId: string): Promise<{ success: boolean }> => {
+  const response = await fetch(`${API_BASE}/api/messages/messages/${messageId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || error.message || 'Failed to delete message');
+  }
   return response.json();
 };

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
 import { ChevronDown, Download, Printer, FileText, Copy, Mail, MessageCircle } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -326,7 +327,7 @@ export default function EstimateDetail() {
     try {
       const leadId = String(row?.leadId || "");
       if (!leadId) return toast.error("No lead linked to this estimate");
-      const res = await fetch(`${API_BASE}/api/leads/${encodeURIComponent(leadId)}`);
+      const res = await fetch(`${API_BASE}/api/leads/${encodeURIComponent(leadId)}`, { headers: getAuthHeaders() });
       const lead = await res.json().catch(() => null);
       if (!res.ok) return toast.error(lead?.error || "Failed to load lead");
       const email = String(lead?.email || "").trim();

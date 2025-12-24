@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoreHorizontal, Plus, FileText, DollarSign, CheckSquare, Mail, Printer, Download, Copy, MessageCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -98,15 +99,15 @@ export default function InvoiceDetailPage() {
     if (!id) return;
     (async () => {
       try {
-        const invRes = await fetch(`${API_BASE}/api/invoices/${id}`);
+        const invRes = await fetch(`${API_BASE}/api/invoices/${id}`, { headers: getAuthHeaders() });
         if (!invRes.ok) return;
         const invRow = await invRes.json();
         setInv(invRow);
 
         const invId = String(invRow?._id || "");
         const [payRes, taskRes] = await Promise.all([
-          fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(invId)}`),
-          fetch(`${API_BASE}/api/tasks?invoiceId=${encodeURIComponent(invId)}`),
+          fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(invId)}`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE}/api/tasks?invoiceId=${encodeURIComponent(invId)}`, { headers: getAuthHeaders() }),
         ]);
         if (payRes.ok) setPayments(await payRes.json());
         if (taskRes.ok) setTasks(await taskRes.json());
@@ -301,7 +302,7 @@ export default function InvoiceDetailPage() {
         setTaskEditingId("");
         setOpenTask(false);
         // reload tasks
-        const tRes = await fetch(`${API_BASE}/api/tasks?invoiceId=${encodeURIComponent(invoiceDbId || id || "")}`);
+        const tRes = await fetch(`${API_BASE}/api/tasks?invoiceId=${encodeURIComponent(invoiceDbId || id || "")}`, { headers: getAuthHeaders() });
         if (tRes.ok) setTasks(await tRes.json());
       }
     } catch {}
@@ -648,7 +649,7 @@ export default function InvoiceDetailPage() {
       </Tabs>
 
       <Dialog open={openInfo} onOpenChange={setOpenInfo}>
-        <DialogContent className="bg-card max-w-2xl">
+        <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Edit invoice info</DialogTitle>
           </DialogHeader>

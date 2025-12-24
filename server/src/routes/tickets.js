@@ -1,6 +1,9 @@
 import { Router } from "express";
+import mongoose from "mongoose";
+import { authenticate } from "../middleware/auth.js";
 import Ticket from "../models/Ticket.js";
 import Counter from "../models/Counter.js";
+import Employee from "../models/Employee.js";
 
 const router = Router();
 
@@ -28,11 +31,45 @@ const assignTicketNoIfMissing = async (doc) => {
   return doc;
 };
 
-router.get("/", async (req, res) => {
+const getMyEmployeeId = async (req) => {
+  if (req.user?.role !== "staff" && req.user?.role !== "marketer") return null;
+  const employee = await Employee.findOne({ email: req.user.email }).select("_id").lean();
+  return employee ? String(employee._id) : null;
+};
+
+const ensureTicketAccess = async (req, res, ticket) => {
+  if (!ticket) return true;
+  if (req.user?.role === "admin") return true;
+  if (req.user?.role === "staff" || req.user?.role === "marketer") {
+    const myEmployeeId = await getMyEmployeeId(req);
+    if (!myEmployeeId) {
+      res.status(403).json({ error: "Access denied" });
+      return false;
+    }
+    if (String(ticket.assignedTo || "") !== myEmployeeId) {
+      res.status(403).json({ error: "Access denied" });
+      return false;
+    }
+    return true;
+  }
+  res.status(403).json({ error: "Access denied" });
+  return false;
+};
+
+router.get("/", authenticate, async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const clientId = req.query.clientId?.toString();
+    
     const filter = {};
+    if (req.user.role === "staff" || req.user.role === "marketer") {
+      const myEmployeeId = await getMyEmployeeId(req);
+      if (!myEmployeeId) return res.json([]);
+      // Ticket.assignedTo is stored as a string in schema
+      filter.assignedTo = myEmployeeId;
+    } else if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
     if (clientId) {
       if (mongoose.isValidObjectId(clientId)) {
         filter.clientId = new mongoose.Types.ObjectId(clientId);
@@ -63,8 +100,9 @@ router.get("/", async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", authenticate, async (req, res) => {
   try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Access denied" });
     const payload = req.body || {};
     const doc = await Ticket.create(payload);
     await assignTicketNoIfMissing(doc);
@@ -73,10 +111,11 @@ router.post("/", async (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", authenticate, async (req, res) => {
   try {
     const doc = await Ticket.findById(req.params.id).lean();
     if (!doc) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureTicketAccess(req, res, doc))) return;
     await ensureCounterAtLeast(Number(doc?.ticketNo || 0) || 0);
     if (!doc.ticketNo) await assignTicketNoIfMissing(doc);
     res.json(doc);
@@ -85,8 +124,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/:id/merge", async (req, res) => {
+router.post("/:id/merge", authenticate, async (req, res) => {
   try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Access denied" });
     const sourceId = req.body?.sourceId?.toString();
     if (!sourceId) return res.status(400).json({ error: "sourceId is required" });
     if (sourceId === req.params.id) return res.status(400).json({ error: "Cannot merge into same ticket" });
@@ -122,11 +162,14 @@ router.post("/:id/merge", async (req, res) => {
   }
 });
 
-router.post("/:id/messages", async (req, res) => {
+router.post("/:id/messages", authenticate, async (req, res) => {
   try {
     const text = req.body?.text?.toString() || "";
     const createdBy = req.body?.createdBy?.toString() || "";
     if (!text.trim()) return res.status(400).json({ error: "Message text is required" });
+    const existing = await Ticket.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureTicketAccess(req, res, existing))) return;
     const msg = { text: text.trim(), createdBy, createdAt: new Date() };
     const doc = await Ticket.findByIdAndUpdate(
       req.params.id,
@@ -140,14 +183,31 @@ router.post("/:id/messages", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
-  try { const doc = await Ticket.findByIdAndUpdate(req.params.id, req.body, { new: true }); if (!doc) return res.status(404).json({ error: "Not found" }); res.json(doc); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+router.put("/:id", authenticate, async (req, res) => {
+  try {
+    const existing = await Ticket.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureTicketAccess(req, res, existing))) return;
+    if ((req.user.role === "staff" || req.user.role === "marketer") && String(req.body?.status || "").toLowerCase() === "closed") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const doc = await Ticket.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
+    res.json(doc);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
-router.delete("/:id", async (req, res) => {
-  try { const r = await Ticket.findByIdAndDelete(req.params.id); if (!r) return res.status(404).json({ error: "Not found" }); res.json({ ok: true }); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+router.delete("/:id", authenticate, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Access denied" });
+  try {
+    const r = await Ticket.findByIdAndDelete(req.params.id);
+    if (!r) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 export default router;

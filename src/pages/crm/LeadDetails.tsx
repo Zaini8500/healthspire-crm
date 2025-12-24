@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { getAuthHeaders } from "@/lib/api/auth";
 import Events from "../events/Events";
 import Files from "../files/Files";
 import Notes from "../notes/Notes";
@@ -304,7 +305,7 @@ export default function LeadDetails() {
       params.set("leadId", id);
       const q = (tasksQuery || "").trim();
       if (q) params.set("q", q);
-      const r = await fetch(`${API_BASE}/api/tasks?${params.toString()}`);
+      const r = await fetch(`${API_BASE}/api/tasks?${params.toString()}`, { headers: getAuthHeaders() });
       if (r.ok) {
         const d = await r.json();
         setTasks(Array.isArray(d) ? d : []);
@@ -349,7 +350,7 @@ export default function LeadDetails() {
         fd.append("file", f);
         fd.append("leadId", id);
         fd.append("name", f.name);
-        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+        const r = await fetch(`${API_BASE}/api/files`, { method: "POST", headers: getAuthHeaders(), body: fd });
         if (r.ok) uploaded += 1;
       }
       return uploaded;
@@ -564,7 +565,7 @@ export default function LeadDetails() {
 
   const loadProjects = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/projects`);
+      const res = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
       setProjects(Array.isArray(data) ? data : []);
@@ -581,7 +582,7 @@ export default function LeadDetails() {
       fd.append("leadId", id);
       fd.append("name", f.name);
       fd.append("file", f);
-      const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
+      const res = await fetch(`${API_BASE}/api/files`, { method: "POST", headers: getAuthHeaders(), body: fd });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       if (json?._id) uploadedIds.push(String(json._id));
@@ -788,7 +789,7 @@ export default function LeadDetails() {
 
   const loadEmployees = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/employees`);
+      const res = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setEmployees(Array.isArray(data) ? data : []);
@@ -908,7 +909,7 @@ export default function LeadDetails() {
 
   const loadLabels = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/lead-labels`);
+      const res = await fetch(`${API_BASE}/api/lead-labels`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setLabels(Array.isArray(data) ? data : []);
@@ -921,7 +922,7 @@ export default function LeadDetails() {
     if (!id) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/leads/${id}`);
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       setLead(json);
@@ -958,7 +959,7 @@ export default function LeadDetails() {
       const params = new URLSearchParams();
       params.set("leadId", id);
       if (contactsQuery.trim()) params.set("q", contactsQuery.trim());
-      const res = await fetch(`${API_BASE}/api/contacts?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/api/contacts?${params.toString()}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       setContacts(Array.isArray(json) ? json : []);
@@ -1067,7 +1068,7 @@ export default function LeadDetails() {
 
       const res = await fetch(`${API_BASE}/api/leads/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);

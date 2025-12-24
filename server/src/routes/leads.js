@@ -1,7 +1,35 @@
 import { Router } from "express";
 import Lead from "../models/Lead.js";
+import Employee from "../models/Employee.js";
+import { authenticate } from "../middleware/auth.js";
 
 const router = Router();
+
+const getMyEmployeeId = async (req) => {
+  const email = req.user?.email;
+  if (!email) return null;
+  const emp = await Employee.findOne({ email }).select("_id").lean();
+  return emp ? String(emp._id) : null;
+};
+
+const ensureLeadAccess = async (req, res, lead) => {
+  if (!lead) return true;
+  if (req.user?.role === "admin") return true;
+  if (req.user?.role === "marketer") {
+    const myEmployeeId = await getMyEmployeeId(req);
+    if (!myEmployeeId) {
+      res.status(403).json({ error: "Access denied" });
+      return false;
+    }
+    if (String(lead.ownerId || "") !== myEmployeeId) {
+      res.status(403).json({ error: "Access denied" });
+      return false;
+    }
+    return true;
+  }
+  res.status(403).json({ error: "Access denied" });
+  return false;
+};
 
 function toStr(v) {
   return v === undefined || v === null ? "" : v.toString();
@@ -33,7 +61,7 @@ function cleanPayload(body) {
   return p;
 }
 
-router.get("/", async (req, res) => {
+router.get("/", authenticate, async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
     const ownerId = req.query.ownerId?.toString();
@@ -44,7 +72,15 @@ router.get("/", async (req, res) => {
     const createdTo = req.query.createdTo?.toString();
 
     const filter = {};
-    if (ownerId) filter.ownerId = ownerId;
+    if (req.user.role === "marketer") {
+      const myEmployeeId = await getMyEmployeeId(req);
+      if (!myEmployeeId) return res.json([]);
+      filter.ownerId = myEmployeeId;
+    } else if (req.user.role === "admin") {
+      if (ownerId) filter.ownerId = ownerId;
+    } else {
+      return res.status(403).json({ error: "Access denied" });
+    }
     if (status) filter.status = status;
     if (source) filter.source = source;
     if (labelId) filter.labels = labelId;
@@ -69,10 +105,18 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", authenticate, async (req, res) => {
   try {
+    if (req.user.role !== "admin" && req.user.role !== "marketer") {
+      return res.status(403).json({ error: "Access denied" });
+    }
     const payload = cleanPayload(req.body);
     if (!payload.name) return res.status(400).json({ error: "name is required" });
+    if (req.user.role === "marketer") {
+      const myEmployeeId = await getMyEmployeeId(req);
+      if (!myEmployeeId) return res.status(403).json({ error: "Access denied" });
+      payload.ownerId = myEmployeeId;
+    }
     if (!payload.initials && payload.name) {
       payload.initials = payload.name
         .split(" ")
@@ -88,13 +132,21 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.post("/bulk", async (req, res) => {
+router.post("/bulk", authenticate, async (req, res) => {
   try {
+    if (req.user.role !== "admin" && req.user.role !== "marketer") {
+      return res.status(403).json({ error: "Access denied" });
+    }
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) return res.status(400).json({ error: "No items provided" });
     const cleaned = items
       .map((x) => cleanPayload(x))
       .filter((x) => x.name);
+    if (req.user.role === "marketer") {
+      const myEmployeeId = await getMyEmployeeId(req);
+      if (!myEmployeeId) return res.status(403).json({ error: "Access denied" });
+      for (const c of cleaned) c.ownerId = myEmployeeId;
+    }
     const inserted = await Lead.insertMany(cleaned, { ordered: false });
     res.status(201).json({ ok: true, inserted: inserted.length });
   } catch (e) {
@@ -102,20 +154,27 @@ router.post("/bulk", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", authenticate, async (req, res) => {
   try {
     const doc = await Lead.findById(req.params.id).lean();
     if (!doc) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureLeadAccess(req, res, doc))) return;
     res.json(doc);
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticate, async (req, res) => {
   try {
     const payload = cleanPayload(req.body);
-    const doc = await Lead.findByIdAndUpdate(req.params.id, payload, { new: true });
+    const existing = await Lead.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureLeadAccess(req, res, existing))) return;
+    if (req.user.role === "marketer") {
+      delete payload.ownerId;
+    }
+    const doc = await Lead.findByIdAndUpdate(req.params.id, payload, { new: true }).lean();
     if (!doc) return res.status(404).json({ error: "Not found" });
     res.json(doc);
   } catch (e) {
@@ -123,8 +182,11 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, async (req, res) => {
   try {
+    const existing = await Lead.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (!(await ensureLeadAccess(req, res, existing))) return;
     const r = await Lead.findByIdAndDelete(req.params.id);
     if (!r) return res.status(404).json({ error: "Not found" });
     res.json({ ok: true });

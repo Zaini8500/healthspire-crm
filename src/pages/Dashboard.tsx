@@ -128,6 +128,9 @@ export default function Dashboard() {
   const [eventsToday, setEventsToday] = useState(0);
   const [pendingLeaves, setPendingLeaves] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
+  const [meName, setMeName] = useState("Admin");
+  const [meEmail, setMeEmail] = useState("");
+  const [meAvatar, setMeAvatar] = useState<string>("");
   const [projectCounts, setProjectCounts] = useState({ open: 0, completed: 0, hold: 0 });
   const [tasksPie, setTasksPie] = useState({ todo: 0, inProgress: 0, completed: 0, expired: 0 });
   const [teamMembers, setTeamMembers] = useState(0);
@@ -138,6 +141,15 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
+        const meRes = await fetch(`${API_BASE}/api/users/me`, { headers: getAuthHeaders() });
+        const meJson = await meRes.json().catch(() => null);
+        const u = (meJson as any)?.user;
+        if (meRes.ok && u) {
+          setMeName(String(u?.name || u?.email || "Admin"));
+          setMeEmail(String(u?.email || ""));
+          setMeAvatar(String(u?.avatar || ""));
+        }
+
         // Projects
         const pr = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
         if (pr.ok) {
@@ -157,6 +169,14 @@ export default function Dashboard() {
       } catch {}
     })();
   }, []);
+
+  const meInitials = String(meName || meEmail || "Admin")
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   useEffect(() => {
     (async () => {
@@ -217,17 +237,17 @@ export default function Dashboard() {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2">Admin Dashboard</h1>
-            <p className="text-blue-100">Welcome back! Here's what's happening across your organization today.</p>
+            <h1 className="text-2xl font-bold mb-2">Welcome back, {meName}!</h1>
+            <p className="text-blue-100">{meEmail || "Here's what's happening across your organization today."}</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm text-blue-200">Total Revenue</p>
               <p className="text-3xl font-bold">${totalRevenue.toLocaleString()}</p>
             </div>
-            <Avatar className="h-16 w-16 border-2 border-white">
-              <AvatarImage src="/api/placeholder/64/64" alt="Admin" />
-              <AvatarFallback className="bg-white text-blue-600 text-xl">AD</AvatarFallback>
+            <Avatar className="h-16 w-16 border-2 border-white bg-white">
+              <AvatarImage src={meAvatar ? `${API_BASE}${meAvatar}` : "/api/placeholder/64/64"} alt="Admin" />
+              <AvatarFallback className="bg-white text-blue-600 text-xl">{meInitials}</AvatarFallback>
             </Avatar>
           </div>
         </div>

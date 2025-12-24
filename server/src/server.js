@@ -44,6 +44,7 @@ import messagesRouter from "./routes/messages.js";
 import usersRouter from "./routes/users.js";
 import announcementsRouter from "./routes/announcements.js";
 import clientPortalRouter from "./routes/client.js";
+import projectRequestsRouter from "./routes/projectRequests.js";
 import authRouter from "./routes/auth.js";
 import estimateFormsRouter from "./routes/estimateForms.js";
 import leadsRouter from "./routes/leads.js";
@@ -52,6 +53,8 @@ import taskLabelsRouter from "./routes/taskLabels.js";
 import remindersRouter from "./routes/reminders.js";
 import helpArticlesRouter from "./routes/helpArticles.js";
 import helpCategoriesRouter from "./routes/helpCategories.js";
+import notificationsRouter from "./routes/notifications.js";
+import settingsRouter from "./routes/settings.js";
 import bcrypt from "bcryptjs";
 import User from "./models/User.js";
 
@@ -132,6 +135,8 @@ app.use("/api/task-labels", taskLabelsRouter);
 app.use("/api/ticket-labels", ticketLabelsRouter);
 app.use("/api/ticket-templates", ticketTemplatesRouter);
 app.use("/api/reminders", remindersRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/settings", settingsRouter);
 app.use("/api/messages", messagesRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/events", eventsApiRouter);
@@ -143,6 +148,7 @@ app.use("/api/subscriptionlabels", subscriptionLabelsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/announcements", announcementsRouter);
 app.use("/api/client", clientPortalRouter);
+app.use("/api/project-requests", projectRequestsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/estimate-forms", estimateFormsRouter);
 // Backward/alternative path alias to avoid 404s from different frontends
@@ -175,7 +181,7 @@ async function seedAdmin() {
 }
 
 mongoose
-  .connect(MONGODB_URI)
+  .connect(MONGODB_URI, { dbName: process.env.MONGODB_DB || "mindspire" })
   .then(() => {
     console.log("MongoDB connected");
     (async () => {

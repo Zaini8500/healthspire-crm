@@ -43,7 +43,10 @@ const navigation: NavItem[] = [
   // 1. Dashboard
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
 
-  // 2. CRM
+  // 2. Clients
+  { title: "Clients", href: "/clients", icon: Building2 },
+
+  // 3. CRM
   {
     title: "CRM",
     href: "/crm",
@@ -53,7 +56,7 @@ const navigation: NavItem[] = [
     ],
   },
 
-  // 3. HRM
+  // 4. HRM
   {
     title: "HRM",
     href: "/hrm",
@@ -68,7 +71,7 @@ const navigation: NavItem[] = [
     ],
   },
 
-  // 4. Projects
+  // 5. Projects
   {
     title: "Projects",
     href: "/projects",
@@ -76,10 +79,11 @@ const navigation: NavItem[] = [
     children: [
       { title: "Overview", href: "/projects" },
       { title: "Timeline", href: "/projects/timeline" },
+      { title: "Project Requests", href: "/project-requests" },
     ],
   },
 
-  // 5. Prospects
+  // 6. Prospects
   {
     title: "Prospects",
     href: "/prospects",
@@ -92,7 +96,7 @@ const navigation: NavItem[] = [
     ],
   },
 
-  // 6. Sales
+  // 7. Sales
   {
     title: "Sales",
     href: "/sales",
@@ -113,6 +117,7 @@ const navigation: NavItem[] = [
   { title: "Tickets", href: "/tickets", icon: Ticket },
   { title: "Events", href: "/events", icon: Calendar },
   { title: "Tasks", href: "/tasks", icon: CheckSquare },
+  { title: "Team Activity", href: "/tasks/activity", icon: Activity },
   { title: "Messages", href: "/messages", icon: MessageSquare },
   { title: "Announcements", href: "/announcements", icon: Megaphone },
   { title: "Subscriptions", href: "/subscriptions", icon: CreditCard },
@@ -120,21 +125,21 @@ const navigation: NavItem[] = [
   { title: "Notes", href: "/notes", icon: StickyNote },
   { title: "Files", href: "/files", icon: Folder },
 
-  // Extra groups requested: App Settings, Access Permission, Client portal, Sales & Prospects, Setup, Plugins
+  // Extra groups requested: App Settings, Access Permission, Client portal, Sales & Prospects, Setup, Settings
   {
-    title: "App Settings",
+    title: "Settings",
     href: "/settings",
     icon: Settings,
     children: [
-      { title: "General", href: "/settings" },
+      { title: "General", href: "/settings/general" },
       { title: "Localization", href: "/settings/localization" },
+      { title: "Theme", href: "/settings/theme" },
       { title: "Email", href: "/settings/email" },
-      { title: "Email templates", href: "/settings/templates" },
       { title: "Modules", href: "/settings/modules" },
-      { title: "Left menu", href: "/settings/left-menu" },
+      { title: "Menu", href: "/settings/left-menu" },
       { title: "Notifications", href: "/settings/notifications" },
       { title: "Integration", href: "/settings/integration" },
-      { title: "Cron Job", href: "/settings/cron" },
+      { title: "System", href: "/settings/system" },
       { title: "Updates", href: "/settings/updates" },
     ],
   },
@@ -147,9 +152,6 @@ const navigation: NavItem[] = [
       { title: "Manage Users", href: "/user-management/users" },
     ],
   },
-<<<<<<< Updated upstream
-  
-=======
   {
     title: "Client portal",
     href: "/client",
@@ -161,48 +163,7 @@ const navigation: NavItem[] = [
       { title: "Project Requests", href: "/client/project-requests" },
     ],
   },
-  {
-    title: "Sales & Prospects",
-    href: "/sales-prospects",
-    icon: Megaphone,
-    children: [
-      // Sales
-      { title: "Invoices", href: "/invoices" },
-      { title: "Orders", href: "/sales/orders" },
-      { title: "Store", href: "/sales/store" },
-      { title: "Payments", href: "/sales/payments" },
-      { title: "Expenses", href: "/sales/expenses" },
-      { title: "Items", href: "/sales/items" },
-      { title: "Contracts", href: "/sales/contracts" },
-      // Prospects
-      { title: "Estimate List", href: "/prospects/estimates" },
-      { title: "Estimate Requests", href: "/prospects/estimate-requests" },
-      { title: "Estimate Forms", href: "/prospects/estimate-forms" },
-      { title: "Proposals", href: "/prospects/proposals" },
-    ],
-  },
-  {
-    title: "Setup",
-    href: "/setup",
-    icon: CheckSquare,
-    children: [
-      { title: "Departments", href: "/hrm/departments" },
-      { title: "Help Categories", href: "/help-support/categories" },
-      { title: "KB Categories", href: "/help-support/knowledge-base/categories" },
-    ],
-  },
-  {
-    title: "Plugins",
-    href: "/plugins",
-    icon: Activity,
-    children: [
-      { title: "Email", href: "/email" },
-      { title: "Video Calls", href: "/calls" },
-      { title: "Calendar", href: "/calendar" },
-    ],
-  },
->>>>>>> Stashed changes
-
+  
   // User Management just above Settings
   {
     title: "User Management",
@@ -214,19 +175,6 @@ const navigation: NavItem[] = [
       { title: "Delete Request", href: "/user-management/delete-request" },
     ],
   },
-  {
-    title: "Help & Support",
-    href: "/help-support",
-    icon: HelpCircle,
-    children: [
-      { title: "Help", href: "/help-support/help" },
-      { title: "Articles", href: "/help-support/articles" },
-      { title: "Categories", href: "/help-support/categories" },
-      { title: "Knowledge base: Articles", href: "/help-support/knowledge-base/articles" },
-      { title: "Knowledge base: Categories", href: "/help-support/knowledge-base/categories" },
-    ],
-  },
-  { title: "Settings", href: "/settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -244,14 +192,31 @@ const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?
   }
 };
 
+const API_BASE = "http://localhost:5000";
+
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState<string[]>([]);
 
-  const role = getStoredAuthUser()?.role || "admin";
+  const me = getStoredAuthUser();
+  const role = me?.role || "admin";
+  const meName = String((me as any)?.name || "").trim();
+  const meEmail = String(me?.email || "").trim();
+  const meAvatar = String((me as any)?.avatar || "").trim();
+  const meInitials = String(meName || meEmail || "U")
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const isAllowed = (item: NavItem) => {
-    if (role === "admin") return true;
+    if (role === "admin") {
+      // Hide Client portal from admin
+      if (item.title === "Client portal") return false;
+      return true;
+    }
 
     if (role === "client") {
       const allowedTop = new Set([
@@ -264,25 +229,42 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       return false;
     }
 
-    // staff
+    // marketer
+    if (role === "marketer") {
+      const marketerTop = new Set([
+        "Dashboard",
+        "CRM",
+        "HRM",
+        "Projects",
+        "Tasks",
+        "Messages",
+        "Announcements",
+        "Calendar",
+        "Notes",
+        "Files",
+      ]);
+      if (marketerTop.has(item.title)) return true;
+      // Hide admin configuration areas for marketers
+      const blockedPrefixes = ["/settings", "/user-management", "/sales", "/prospects"];
+      if (blockedPrefixes.some((p) => item.href?.startsWith(p))) return false;
+      return false;
+    }
+
+    // staff (team member)
     const staffTop = new Set([
       "Dashboard",
-      "CRM",
       "HRM",
       "Projects",
       "Tasks",
       "Messages",
       "Announcements",
-      "Subscriptions",
       "Calendar",
-      "Email",
-      "Video Calls",
       "Notes",
       "Files",
     ]);
     if (staffTop.has(item.title)) return true;
-    // Hide admin configuration areas for staff
-    const blockedPrefixes = ["/settings", "/user-management"];
+    // Hide admin configuration areas and CRM for staff
+    const blockedPrefixes = ["/settings", "/user-management", "/crm", "/sales", "/prospects"];
     if (blockedPrefixes.some((p) => item.href?.startsWith(p))) return false;
     return false;
   };
@@ -362,7 +344,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   </button>
                   {!collapsed && openMenus.includes(item.title) && (
                     <ul className="mt-1 ml-6 space-y-1 border-l border-sidebar-border pl-4">
-                      {item.children.map((child) => (
+                      {item.children
+                        .filter((child) => role === "admin" || child.href !== "/project-requests")
+                        .map((child) => (
                         <li key={child.href}>
                           <NavLink
                             to={child.href}
@@ -403,23 +387,31 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* User Profile */}
-      {!collapsed && (
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-indigo flex items-center justify-center text-primary-foreground font-semibold">
-              JD
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">
-                John Doe
-              </p>
-              <p className="text-xs text-sidebar-muted truncate">
-                Administrator
-              </p>
+      <div className="p-4 border-t border-sidebar-border">
+        {!collapsed ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent">
+              <div className="w-10 h-10 rounded-full bg-white border border-sidebar-border flex items-center justify-center font-semibold text-sidebar-foreground overflow-hidden">
+                {meAvatar ? (
+                  <img src={`${API_BASE}${meAvatar}`} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{meInitials}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {meName || meEmail || "User"}
+                </p>
+                <p className="text-xs text-sidebar-muted truncate">
+                  {role ? String(role).toUpperCase() : ""}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div />
+        )}
+      </div>
     </aside>
   );
 }

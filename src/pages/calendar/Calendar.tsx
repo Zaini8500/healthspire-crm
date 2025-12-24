@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -10,6 +12,9 @@ interface CalendarEvent {
   title: string;
   date: string; // YYYY-MM-DD
   category: EventCategory;
+  id?: string;
+  start?: string;
+  end?: string;
 }
 
 const categoryMeta: Record<EventCategory, { name: string; dot: string; chip: string }> = {
@@ -21,6 +26,7 @@ const categoryMeta: Record<EventCategory, { name: string; dot: string; chip: str
   design: { name: "Design", dot: "bg-sky-400", chip: "bg-sky-100 text-sky-800" },
 };
 
+const API_BASE = "http://localhost:5000";
 const sampleEvents: CalendarEvent[] = [
   { title: "Team Events", date: "2025-12-03", category: "team" },
   { title: "Meeting with", date: "2025-12-09", category: "design" },
@@ -32,6 +38,13 @@ const sampleEvents: CalendarEvent[] = [
 export default function CalendarPage() {
   const [view, setView] = useState<"month" | "week" | "day">("month");
   const [current, setCurrent] = useState(() => new Date(2025, 11, 1)); // Dec 2025
+  const [events, setEvents] = useState<CalendarEvent[]>(sampleEvents);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editingId, setEditingId] = useState<string | "">("");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
+  const [draftType, setDraftType] = useState("meeting");
 
   const monthMatrix = useMemo(() => buildMonthMatrix(current), [current]);
 
@@ -40,12 +53,136 @@ export default function CalendarPage() {
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    for (const ev of sampleEvents) {
+    for (const ev of events) {
       if (!map.has(ev.date)) map.set(ev.date, []);
       map.get(ev.date)!.push(ev);
     }
     return map;
+  }, [events]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/events`);
+        if (!r.ok) return;
+        const raw = await r.json();
+        const list = Array.isArray(raw) ? raw : [];
+        const toISO = (d?: string) => {
+          if (!d) return "";
+          try {
+            const x = new Date(d);
+            if (!Number.isFinite(x.getTime())) return "";
+            const y = x.getFullYear();
+            const m = String(x.getMonth() + 1).padStart(2, "0");
+            const day = String(x.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          } catch { return ""; }
+        };
+        const mapped: CalendarEvent[] = list
+          .map((e: any) => ({
+            id: String(e._id || ""),
+            title: String(e.title || "Event"),
+            date: toISO(String(e.start || e.end || "")),
+            start: e.start,
+            end: e.end,
+            category: ((): EventCategory => {
+              const t = String(e.type || "").toLowerCase();
+              if (t === "meeting") return "team";
+              if (t === "design") return "design";
+              if (t === "work") return "work";
+              if (t === "project") return "projects";
+              return "team";
+            })(),
+          }))
+          .filter((ev: CalendarEvent) => Boolean(ev.date));
+        if (mapped.length) setEvents(mapped);
+      } catch {
+        // keep sample events on error
+      }
+    })();
   }, []);
+
+  const meRole = (() => {
+    try {
+      const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!raw) return "admin";
+      const j = JSON.parse(raw);
+      return j?.role || "admin";
+    } catch { return "admin"; }
+  })();
+
+  const loadEvents = async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/events`);
+      if (!r.ok) return;
+      const raw = await r.json();
+      const list = Array.isArray(raw) ? raw : [];
+      const toISO = (d?: string) => {
+        if (!d) return "";
+        try {
+          const x = new Date(d);
+          if (!Number.isFinite(x.getTime())) return "";
+          const y = x.getFullYear();
+          const m = String(x.getMonth() + 1).padStart(2, "0");
+          const day = String(x.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        } catch { return ""; }
+      };
+      const mapped: CalendarEvent[] = list
+        .map((e: any) => ({
+          id: String(e._id || ""),
+          title: String(e.title || "Event"),
+          date: toISO(String(e.start || e.end || "")),
+          start: e.start,
+          end: e.end,
+          category: ((): EventCategory => {
+            const t = String(e.type || "").toLowerCase();
+            if (t === "meeting") return "team";
+            if (t === "design") return "design";
+            if (t === "work") return "work";
+            if (t === "project") return "projects";
+            return "team";
+          })(),
+        }))
+        .filter((ev: CalendarEvent) => Boolean(ev.date));
+      if (mapped.length) setEvents(mapped);
+    } catch {}
+  };
+
+  const openCreateForDate = (d: Date) => {
+    if (meRole !== "admin") return;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    setEditingId("");
+    setDraftTitle("");
+    setDraftType("meeting");
+    setDraftStart(`${yyyy}-${mm}-${dd}T09:00`);
+    setDraftEnd(`${yyyy}-${mm}-${dd}T10:00`);
+    setOpenEdit(true);
+  };
+
+  const saveEvent = async () => {
+    const title = draftTitle.trim();
+    if (!title || !draftStart) { setOpenEdit(false); return; }
+    try {
+      const body: any = { title, start: new Date(draftStart).toISOString(), end: draftEnd ? new Date(draftEnd).toISOString() : undefined, type: draftType };
+      const method = editingId ? "PUT" : "POST";
+      const url = editingId ? `${API_BASE}/api/events/${editingId}` : `${API_BASE}/api/events`;
+      const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (r.ok) {
+        await loadEvents();
+      }
+    } catch {}
+    setOpenEdit(false);
+  };
+
+  const deleteEvent = async () => {
+    if (!editingId) { setOpenEdit(false); return; }
+    try { await fetch(`${API_BASE}/api/events/${editingId}`, { method: "DELETE" }); await loadEvents(); } catch {}
+    setOpenEdit(false);
+  };
 
   const gotoToday = () => setCurrent(new Date());
   const prev = () => setCurrent((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
@@ -99,6 +236,9 @@ export default function CalendarPage() {
                 <Button variant={view === "week" ? "default" : "outline"} size="sm" onClick={() => setView("week")}>week</Button>
                 <Button variant={view === "day" ? "default" : "outline"} size="sm" onClick={() => setView("day")}>day</Button>
               </div>
+              {meRole === "admin" && (
+                <Button variant="default" size="sm" onClick={() => openCreateForDate(new Date())}>New event</Button>
+              )}
             </div>
 
             {/* Month view */}
@@ -117,13 +257,33 @@ export default function CalendarPage() {
                         const inMonth = cell.inMonth;
                         const events = eventsByDate.get(dateStr) || [];
                         return (
-                          <div key={ci} className={cn("h-28 p-1.5", !inMonth && "bg-muted/20")}> 
+                          <div
+                            key={ci}
+                            className={cn("h-28 p-1.5", !inMonth && "bg-muted/20")}
+                            onDoubleClick={() => openCreateForDate(cell.date)}
+                          > 
                             <div className="text-[11px] text-muted-foreground mb-1">{cell.date.getDate()}</div>
                             <div className="space-y-1">
                               {events.map((ev, i) => (
-                                <div key={i} title={ev.title} className={cn("truncate text-xs px-2 py-1 rounded-md", categoryMeta[ev.category].chip)}>
+                                <button
+                                  key={i}
+                                  type="button"
+                                  title={ev.title}
+                                  className={cn("w-full text-left truncate text-xs px-2 py-1 rounded-md", categoryMeta[ev.category].chip)}
+                                  onClick={() => {
+                                    if (meRole !== "admin") return;
+                                    setEditingId(ev.id || "");
+                                    setDraftTitle(ev.title);
+                                    const startIso = ev.start ? new Date(ev.start).toISOString().slice(0,16) : `${ev.date}T09:00`;
+                                    const endIso = ev.end ? new Date(ev.end).toISOString().slice(0,16) : `${ev.date}T10:00`;
+                                    setDraftStart(startIso);
+                                    setDraftEnd(endIso);
+                                    setDraftType("meeting");
+                                    setOpenEdit(true);
+                                  }}
+                                >
                                   {ev.title}
-                                </div>
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -143,6 +303,43 @@ export default function CalendarPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Add/Edit Event Modal (admin only) */}
+      <Dialog open={openEdit} onOpenChange={setOpenEdit}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit event" : "Add event"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs mb-1">Title</div>
+                <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Event title" />
+              </div>
+              <div>
+                <div className="text-xs mb-1">Type</div>
+                <Input value={draftType} onChange={(e) => setDraftType(e.target.value)} placeholder="meeting / work / project / design" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs mb-1">Start</div>
+                <Input type="datetime-local" value={draftStart} onChange={(e) => setDraftStart(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs mb-1">End</div>
+                <Input type="datetime-local" value={draftEnd} onChange={(e) => setDraftEnd(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            {editingId ? (
+              <Button variant="destructive" onClick={deleteEvent}>Delete</Button>
+            ) : null}
+            <Button onClick={saveEvent}>{editingId ? "Save" : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

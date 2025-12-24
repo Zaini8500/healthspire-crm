@@ -164,7 +164,8 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     selectedConversation,
     messages,
     isLoading: isLoadingConversations || isLoadingMessages || sendMessageMutation.isPending,
-    error: conversationsError || messagesError || sendMessageMutation.error,
+    // Do not surface sendMessage mutation error as a page-level error; it's handled via toasts.
+    error: conversationsError || messagesError,
     selectConversation,
     sendMessage: handleSendMessage,
     createNewConversation,

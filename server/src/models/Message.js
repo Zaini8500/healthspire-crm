@@ -15,8 +15,9 @@ const MessageSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
-      trim: true
+      required: false,
+      trim: true,
+      default: ''
     },
     readBy: [{
       type: mongoose.Schema.Types.ObjectId,
@@ -27,7 +28,15 @@ const MessageSchema = new mongoose.Schema(
       name: String,
       type: String,
       size: Number
-    }]
+    }],
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    deletedAt: {
+      type: Date
+    }
   },
   { timestamps: true }
 );

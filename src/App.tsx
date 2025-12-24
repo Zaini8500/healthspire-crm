@@ -7,13 +7,14 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { MessagingProvider } from "@/contexts/MessagingContext";
 import Dashboard from "./pages/Dashboard";
 import ClientDashboard from "./pages/dashboard/ClientDashboard";
-import TeamMemberDashboard from "./pages/dashboard/TeamMemberDashboard";
-import MarketerDashboard from "./pages/dashboard/MarketerDashboard";
+import TeamMemberDashboard from "./pages/team-member/TeamMemberDashboard";
+import MarketerDashboard from "./pages/marketer/MarketerDashboard";
 import ClientTickets from "./pages/client/ClientTickets";
 import ClientTicketDetails from "./pages/client/ClientTicketDetails";
 import ClientAnnouncements from "./pages/client/ClientAnnouncements";
 import ClientMessages from "./pages/client/ClientMessages.tsx";
 import ClientProjectRequests from "./pages/client/ProjectRequests";
+import ProjectRequestsAdmin from "./pages/project-requests/ProjectRequests";
 import Events from "./pages/events/Events";
 import Clients from "./pages/clients/Clients";
 import ClientDetails from "./pages/clients/ClientDetails";
@@ -86,8 +87,10 @@ import InvoicePreview from "./pages/invoices/InvoicePreview";
 import EstimatePreview from "./pages/prospects/EstimatePreview";
 import Tasks from "./pages/tasks/Tasks";
 import TaskDetails from "./pages/tasks/TaskDetails";
+import TeamActivity from "./pages/tasks/TeamActivity";
 import NotFound from "./pages/NotFound";
 import SettingsPage from "./pages/settings/Settings";
+import ProfileSettings from "./pages/profile/ProfileSettings";
 import AuthLayout from "./pages/auth/AuthLayout";
 
 const queryClient = new QueryClient();
@@ -130,6 +133,7 @@ const getModuleFromPath = (pathname: string): string => {
   if (pathname.startsWith("/calendar")) return "calendar";
   if (pathname.startsWith("/notes")) return "notes";
   if (pathname.startsWith("/files")) return "files";
+  if (pathname.startsWith("/profile")) return "profile";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/user-management")) return "user_management";
   if (pathname.startsWith("/client")) return "client_portal";
@@ -147,13 +151,13 @@ const RoleGuard = ({ children }: { children: React.ReactNode }) => {
   if (role === "admin") return <>{children}</>;
 
   if (role === "client") {
-    const allowed = new Set(["client_portal", "messages", "dashboard"]);
+    const allowed = new Set(["client_portal", "messages", "dashboard", "profile"]);
     if (allowed.has(moduleKey)) return <>{children}</>;
     return <Navigate to="/client" replace />;
   }
 
   // staff (including marketer)
-  const staffDefault = new Set(["dashboard", "messages", "announcements", "calendar", "tasks"]);
+  const staffDefault = new Set(["dashboard", "messages", "announcements", "calendar", "tasks", "profile", "files", "notes", "projects", "hrm"]);
   if (staffDefault.has(moduleKey)) return <>{children}</>;
   if (perms.has(moduleKey)) return <>{children}</>;
   return <Navigate to="/" replace />;
@@ -198,14 +202,9 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-<<<<<<< HEAD
       <MessagingProvider>
-        <BrowserRouter future={{ v7_relativeSplatPath: true }}>
+        <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
           <Routes>
-=======
-      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-        <Routes>
->>>>>>> 730fa665efcb7325c76fac1f1d5c841e9f138166
           {/* Public auth route */}
           <Route path="/auth" element={<AuthLayout />} />
 
@@ -234,6 +233,14 @@ const App = () => (
             <Route path="/clients/:id/primary-contact" element={<PrimaryContact />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/tasks/:id" element={<TaskDetails />} />
+            <Route
+              path="/tasks/activity"
+              element={getStoredAuthUser()?.role === "admin" ? <TeamActivity /> : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/project-requests"
+              element={getStoredAuthUser()?.role === "admin" ? <ProjectRequestsAdmin /> : <Navigate to="/" replace />}
+            />
             {/* CRM Routes */}
             <Route path="/crm/leads" element={<Leads />} />
             <Route path="/crm/leads/:id" element={<LeadDetails />} />
@@ -255,18 +262,16 @@ const App = () => (
             <Route path="/projects/:id" element={<ProjectDashboard />} />
             <Route path="/projects/timeline" element={<Timeline />} />
             {/* Communication */}
-<<<<<<< HEAD
             <Route path="/messages" element={<Messaging />} />
             <Route path="/email" element={<Chat />} />
             <Route path="/calls" element={<Chat />} />
             <Route path="/messaging" element={<Messaging />} />
-=======
-            <Route path="/messages" element={<Chat />} />
-            {/* Removed: /email and /calls */}
->>>>>>> 730fa665efcb7325c76fac1f1d5c841e9f138166
             {/* General */}
             <Route path="/announcements" element={<Announcements />} />
-            <Route path="/announcements/new" element={<AddAnnouncement />} />
+            <Route
+              path="/announcements/new"
+              element={getStoredAuthUser()?.role === "admin" ? <AddAnnouncement /> : <Navigate to="/announcements" replace />}
+            />
             <Route path="/announcements/:id" element={<AnnouncementView />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetails />} />
@@ -317,21 +322,16 @@ const App = () => (
             <Route path="/reports/leads/team-members" element={<LeadsTeamMembers />} />
             <Route path="/reports/tickets/statistics" element={<TicketsStatistics />} />
             {/* Portals */}
-<<<<<<< HEAD
             <Route path="/client" element={<ClientDashboard />} />
-<<<<<<< Updated upstream
-=======
->>>>>>> 730fa665efcb7325c76fac1f1d5c841e9f138166
-=======
             <Route path="/client/messages" element={<ClientMessages />} />
             <Route path="/client/announcements" element={<ClientAnnouncements />} />
             <Route path="/client/tickets" element={<ClientTickets />} />
             <Route path="/client/tickets/:id" element={<ClientTicketDetails />} />
             <Route path="/client/project-requests" element={<ClientProjectRequests />} />
->>>>>>> Stashed changes
             <Route path="/admin" element={<Dashboard />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:section" element={<SettingsPage />} />
+            <Route path="/profile" element={<ProfileSettings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
           </Routes>

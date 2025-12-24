@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type Settings = {
   general: {
@@ -21,6 +21,9 @@ export type Settings = {
     country?: string;
     brandingEnabled?: boolean;
     loginMessage?: string;
+    fontFamily?: string;
+    darkMode?: boolean;
+    compactMode?: boolean;
   };
   localization: {
     language: string;
@@ -80,6 +83,15 @@ export type Settings = {
     enabled?: boolean;
     schedule?: string; // cron expression
   };
+  system?: {
+    maintenanceMode?: boolean;
+    debugMode?: boolean;
+    autoBackup?: boolean;
+    sessionTimeout?: number;
+    maxUploadSize?: number;
+    backupRetention?: number;
+    maintenanceMessage?: string;
+  };
   meta: {
     version: string;
     updatedAt: string;
@@ -107,6 +119,9 @@ const DEFAULTS: Settings = {
     country: "PK",
     brandingEnabled: true,
     loginMessage: "Welcome to HealthSpire CRM",
+    fontFamily: "Inter",
+    darkMode: false,
+    compactMode: false,
   },
   localization: {
     language: "en",
@@ -192,6 +207,15 @@ const DEFAULTS: Settings = {
     enabled: true,
     schedule: "0 9 * * *", // every day at 09:00
   },
+  system: {
+    maintenanceMode: false,
+    debugMode: false,
+    autoBackup: true,
+    sessionTimeout: 120,
+    maxUploadSize: 10,
+    backupRetention: 30,
+    maintenanceMessage: "System under maintenance. Please try again later.",
+  },
   meta: {
     version: "1.0.0",
     updatedAt: new Date().toISOString(),
@@ -212,6 +236,27 @@ export function useSettings() {
     }
   });
 
+  const API_BASE = "http://localhost:5000";
+
+  // Load from backend on first mount and merge with defaults
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
+        if (!res.ok) return;
+        const remote = (await res.json()) as Partial<Settings>;
+        if (cancelled) return;
+        const merged = { ...DEFAULTS, ...remote } as Settings;
+        setSettings(merged);
+        localStorage.setItem(KEY, JSON.stringify(merged));
+      } catch {
+        // ignore and keep local cache
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const save = useCallback((next: Partial<Settings>) => {
     setSettings(prev => {
       const merged: Settings = {
@@ -225,7 +270,18 @@ export function useSettings() {
   }, []);
 
   const saveSection = useCallback(<K extends keyof Settings>(section: K, data: Settings[K]) => {
+    // optimistic update
     save({ [section]: data } as Partial<Settings>);
+    // persist to backend
+    try {
+      fetch(`${API_BASE}/api/settings/${String(section)}` as string, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    } catch {
+      // ignore background errors
+    }
   }, [save]);
 
   const exportJSON = useCallback(() => {
@@ -243,11 +299,27 @@ export function useSettings() {
     const merged: Settings = { ...DEFAULTS, ...parsed } as Settings;
     setSettings(merged);
     localStorage.setItem(KEY, JSON.stringify(merged));
+    try {
+      await fetch(`${API_BASE}/api/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(merged),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
   }, []);
 
   const resetAll = useCallback(() => {
     setSettings(DEFAULTS);
     localStorage.setItem(KEY, JSON.stringify(DEFAULTS));
+    try {
+      fetch(`${API_BASE}/api/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(DEFAULTS),
+      }).catch(() => {});
+    } catch {}
   }, []);
 
   const resetSection = useCallback(<K extends keyof Settings>(section: K) => {
@@ -260,6 +332,13 @@ export function useSettings() {
       localStorage.setItem(KEY, JSON.stringify(next));
       return next;
     });
+    try {
+      fetch(`${API_BASE}/api/settings/${String(section)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(DEFAULTS[section]),
+      }).catch(() => {});
+    } catch {}
   }, []);
 
   const data = useMemo(() => settings, [settings]);

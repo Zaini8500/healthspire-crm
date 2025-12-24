@@ -51,6 +51,7 @@ import {
   FileSignature,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -154,6 +155,25 @@ export default function Leads() {
     primaryContact: true,
   });
 
+  // Kanban columns and grouping
+  const columns = [
+    { id: "New", title: "New", color: "bg-slate-400" },
+    { id: "Qualified", title: "Qualified", color: "bg-emerald-500" },
+    { id: "Discussion", title: "Discussion", color: "bg-sky-500" },
+    { id: "Negotiation", title: "Negotiation", color: "bg-amber-500" },
+    { id: "Won", title: "Won", color: "bg-green-600" },
+    { id: "Lost", title: "Lost", color: "bg-rose-500" },
+  ] as const;
+
+  const kanbanGroups: Record<string, LeadDoc[]> = useMemo(() => {
+    const map: Record<string, LeadDoc[]> = Object.fromEntries(columns.map((c) => [c.id, []]));
+    for (const l of items) {
+      const s = (l.status && columns.find((c) => c.id === l.status)?.id) || "New";
+      map[s].push(l);
+    }
+    return map;
+  }, [items]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [openImport, setOpenImport] = useState(false);
@@ -237,6 +257,22 @@ export default function Leads() {
     return n || c.name || "-";
   };
 
+  const updateLeadStatus = async (leadId: string, status: string) => {
+    const prev = items;
+    setItems((p) => p.map((l) => (String(l._id) === String(leadId) ? { ...l, status } : l)));
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}`, {
+        method: "PUT",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed");
+    } catch {
+      setItems(prev);
+      toast.error("Failed to update status");
+    }
+  };
+
   const formatDate = (iso?: string) => {
     if (!iso) return "-";
     try {
@@ -276,7 +312,7 @@ export default function Leads() {
 
   const loadEmployees = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/employees`);
+      const res = await fetch(`${API_BASE}/api/employees`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setEmployees(Array.isArray(data) ? data : []);
@@ -287,7 +323,7 @@ export default function Leads() {
 
   const loadLabels = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/lead-labels`);
+      const res = await fetch(`${API_BASE}/api/lead-labels`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setLabels(Array.isArray(data) ? data : []);
@@ -298,7 +334,7 @@ export default function Leads() {
 
   const loadContacts = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/contacts`);
+      const res = await fetch(`${API_BASE}/api/contacts`, { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
       setContacts(Array.isArray(data) ? data : []);
@@ -319,7 +355,7 @@ export default function Leads() {
       if (filterCreatedFrom) params.set("createdFrom", filterCreatedFrom);
       if (filterCreatedTo) params.set("createdTo", filterCreatedTo);
       const url = `${API_BASE}/api/leads${params.toString() ? `?${params.toString()}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
@@ -341,7 +377,7 @@ export default function Leads() {
     let cancelled = false;
     const safeJson = async (url: string) => {
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: getAuthHeaders() });
         if (!res.ok) return [];
         const json = await res.json().catch(() => []);
         return Array.isArray(json) ? json : [];
@@ -498,7 +534,7 @@ export default function Leads() {
       const method = editingId ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
@@ -514,7 +550,7 @@ export default function Leads() {
 
   const deleteLead = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       toast.success("Lead deleted");
@@ -533,7 +569,7 @@ export default function Leads() {
       }
       const res = await fetch(`${API_BASE}/api/lead-labels`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name, color: manageLabelColor }),
       });
       const json = await res.json().catch(() => null);
@@ -548,7 +584,7 @@ export default function Leads() {
 
   const deleteLabel = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/lead-labels/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/lead-labels/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed");
       toast.success("Label deleted");
@@ -708,149 +744,21 @@ export default function Leads() {
         toast.error("No rows found");
         return;
       }
+
       const res = await fetch(`${API_BASE}/api/leads/bulk`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ items: rows }),
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "Failed");
-      toast.success("Import complete");
+      if (!res.ok) throw new Error(json?.error || "Failed to import");
+      toast.success("Imported");
       setOpenImport(false);
       if (importRef.current) importRef.current.value = "";
       await loadLeads();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to import leads");
+      toast.error(e?.message || "Failed to import");
     }
-  };
-
-  const columns = [
-    { id: "New", title: "New", color: "bg-amber-400" },
-    { id: "Qualified", title: "Qualified", color: "bg-blue-500" },
-    { id: "Discussion", title: "Discussion", color: "bg-teal-500" },
-    { id: "Negotiation", title: "Negotiation", color: "bg-primary" },
-    { id: "Won", title: "Won", color: "bg-green-500" },
-    { id: "Lost", title: "Lost", color: "bg-rose-500" },
-  ] as const;
-
-  const kanbanGroups: Record<string, LeadDoc[]> = useMemo(() => {
-    const g: Record<string, LeadDoc[]> = {};
-    columns.forEach((c) => {
-      g[c.id] = items.filter((l) => (l.status || "New") === c.id);
-    });
-    return g;
-  }, [items]);
-
-  const updateLeadStatus = async (leadId: string, newStatus: string) => {
-    const lead = items.find((x) => x._id === leadId);
-    if (!lead) return;
-    const prevStatus = lead.status || "New";
-    if (prevStatus === newStatus) return;
-
-    // optimistic UI
-    setItems((p) => p.map((x) => (x._id === leadId ? { ...x, status: newStatus } : x)));
-    try {
-      const res = await fetch(`${API_BASE}/api/leads/${encodeURIComponent(leadId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "Failed to update");
-    } catch (e: any) {
-      // rollback
-      setItems((p) => p.map((x) => (x._id === leadId ? { ...x, status: prevStatus } : x)));
-      toast.error(e?.message || "Failed to move lead");
-    }
-  };
-
-  const openConvertDialog = (mode: "client" | "contact", lead: LeadDoc) => {
-    const ownerName = lead.ownerId ? (employeeNameById.get(lead.ownerId) || "") : "";
-    const type = (lead.type || "Organization") === "Person" ? "Person" : "Organization";
-    const primary = primaryContactByLeadId.get(lead._id);
-    const pcName = displayContactName(primary);
-    const [fn, ...rest] = (pcName && pcName !== "-" ? pcName : "").split(" ").filter(Boolean);
-
-    setConvertMode(mode);
-    setMakeClientLead(lead);
-    setMakeClientStep(mode === "contact" ? "contact" : "details");
-    setMakeClientForm({
-      type,
-      name: lead.name || "",
-      owner: ownerName,
-      address: lead.address || "",
-      city: lead.city || "",
-      state: lead.state || "",
-      zip: lead.zip || "",
-      country: lead.country || "",
-      phone: lead.phone || "",
-      website: lead.website || "",
-      vatNumber: lead.vatNumber || "",
-      gstNumber: lead.gstNumber || "",
-      clientGroups: "",
-      currency: lead.currency || "",
-      currencySymbol: lead.currencySymbol || "",
-      labels: "",
-      disableOnlinePayment: false,
-      firstName: fn || "",
-      lastName: rest.join(" ") || "",
-      email: lead.email || "",
-      contactPhone: lead.phone || "",
-      skype: "",
-      jobTitle: "",
-      gender: "male",
-      password: "",
-      primaryContact: true,
-    });
-    setMakeClientOpen(true);
-  };
-
-  const createLeadContactFromForm = async (leadId: string) => {
-    const firstName = makeClientForm.firstName.trim();
-    const lastName = makeClientForm.lastName.trim();
-    if (!firstName) {
-      toast.error("First name is required");
-      return null;
-    }
-    if (!makeClientForm.email.trim()) {
-      toast.error("Email is required");
-      return null;
-    }
-    const fullName = `${firstName}${lastName ? ` ${lastName}` : ""}`.trim();
-
-    if (makeClientForm.primaryContact) {
-      const currentPrimary = contacts.filter((c) => String(c.leadId || "") === leadId && c.isPrimaryContact);
-      await Promise.all(
-        currentPrimary.map((c) =>
-          fetch(`${API_BASE}/api/contacts/${c._id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ isPrimaryContact: false }),
-          })
-        )
-      );
-    }
-
-    const res = await fetch(`${API_BASE}/api/contacts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leadId,
-        name: fullName,
-        firstName,
-        lastName,
-        jobTitle: makeClientForm.jobTitle,
-        email: makeClientForm.email.trim(),
-        phone: makeClientForm.contactPhone || makeClientForm.phone,
-        skype: makeClientForm.skype,
-        isPrimaryContact: Boolean(makeClientForm.primaryContact),
-        gender: makeClientForm.gender,
-      }),
-    });
-    const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error || "Failed to create contact");
-    setContacts((p) => [json as any, ...p]);
-    return json;
   };
 
   const saveMakeClient = async () => {
@@ -903,7 +811,7 @@ export default function Leads() {
 
       const res = await fetch(`${API_BASE}/api/clients`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);

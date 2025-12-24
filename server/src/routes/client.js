@@ -7,6 +7,8 @@ import Ticket from "../models/Ticket.js";
 import Counter from "../models/Counter.js";
 import Announcement from "../models/Announcement.js";
 import ProjectRequest from "../models/ProjectRequest.js";
+import User from "../models/User.js";
+import Notification from "../models/Notification.js";
 
 const router = Router();
 
@@ -211,6 +213,30 @@ router.post("/project-requests", authenticate, requireClient, async (req, res) =
     });
 
     await projectRequest.save();
+
+    try {
+      const admins = await User.find({ role: "admin", status: "active" }).select("_id").lean();
+      const now = new Date();
+      if (admins.length) {
+        const clientName = String(req.user?.name || req.user?.email || "Client");
+        await Notification.insertMany(
+          admins.map((a) => ({
+            userId: a._id,
+            type: "project_request_new",
+            title: "New project request",
+            message: `${clientName}: ${String(title).trim()}`,
+            href: "/project-requests",
+            meta: { projectRequestId: projectRequest._id, clientId: req.user.clientId },
+            createdAt: now,
+            updatedAt: now,
+          })),
+          { ordered: false }
+        );
+      }
+    } catch {
+      // best-effort
+    }
+
     res.status(201).json(projectRequest);
   } catch (e) {
     res.status(500).json({ error: e.message });

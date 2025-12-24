@@ -5,9 +5,24 @@ import Conversation from '../models/Conversation.js';
 import Project from '../models/Project.js';
 import Employee from '../models/Employee.js';
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+
+const hasParticipant = (conversation, userId) => {
+  const uid = String(userId || '');
+  const parts = Array.isArray(conversation?.participants) ? conversation.participants : [];
+  return parts.some((p) => String(p) === uid);
+};
+
+const allowedRolesForConversationCreate = (role) => {
+  const r = String(role || '').toLowerCase();
+  if (r === 'admin') return new Set(['admin', 'staff', 'marketer']);
+  if (r === 'staff') return new Set(['admin', 'staff', 'marketer']);
+  if (r === 'marketer') return new Set(['admin', 'staff', 'marketer']);
+  return new Set();
+};
 
 // Get all conversations for current user
 router.get('/conversations', authenticate, async (req, res) => {
@@ -129,10 +144,41 @@ router.post('/conversations', authenticate, async (req, res) => {
 
     // Add current user to participants if not already included
     const allParticipants = [...new Set([...participantIds, req.user._id.toString()])];
+
+    // Validate participant ids
+    for (const pid of allParticipants) {
+      if (!mongoose.Types.ObjectId.isValid(String(pid))) {
+        return res.status(400).json({ error: 'Invalid participant id' });
+      }
+    }
+
+    // Enforce internal messaging permissions
+    const allowed = allowedRolesForConversationCreate(req.user.role);
+    if (!allowed.size) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const users = await User.find({ _id: { $in: allParticipants } }).select('_id role status').lean();
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+    for (const pid of allParticipants) {
+      const u = byId.get(String(pid));
+      if (!u) return res.status(400).json({ error: 'Participant not found' });
+      if (String(u.status || '').toLowerCase() === 'inactive') {
+        return res.status(400).json({ error: 'Participant is inactive' });
+      }
+      const pr = String(u.role || '').toLowerCase();
+      if (pr === 'client') {
+        return res.status(400).json({ error: 'Clients can only chat via project conversations' });
+      }
+      if (!allowed.has(pr)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
     
     // For 1:1 chat, check if conversation already exists
     if (allParticipants.length === 2) {
       const existingConvo = await Conversation.findOne({
+        projectId: { $exists: false },
         participants: { $all: allParticipants, $size: allParticipants.length }
       })
         .populate('participants', 'name email avatar')
@@ -145,6 +191,7 @@ router.post('/conversations', authenticate, async (req, res) => {
 
     // Create new conversation
     const conversation = await Conversation.create({
+      projectId: undefined,
       participants: allParticipants,
       isGroup: allParticipants.length > 2,
       createdBy: req.user._id,
@@ -172,7 +219,7 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
       return res.status(404).json({ error: 'Conversation not found' });
     }
     
-    if (!conversation.participants.includes(req.user._id)) {
+    if (!hasParticipant(conversation, req.user._id)) {
       return res.status(403).json({ error: 'Access denied: not a participant in this conversation' });
     }
 
@@ -225,7 +272,7 @@ router.post('/messages', authenticate, async (req, res) => {
     return res.status(404).json({ error: 'Conversation not found' });
   }
   
-  if (!conversation.participants.includes(req.user._id)) {
+  if (!hasParticipant(conversation, req.user._id)) {
     if (session) session.endSession();
     return res.status(403).json({ error: 'Access denied: not a participant in this conversation' });
   }
@@ -252,6 +299,36 @@ router.post('/messages', authenticate, async (req, res) => {
       },
       useSession ? { new: true, session } : { new: true }
     );
+
+    // Best-effort notification fanout (outside transaction concerns)
+    try {
+      const convo = await Conversation.findById(conversationId).select('participants projectId').lean();
+      const parts = Array.isArray(convo?.participants) ? convo.participants : [];
+      const senderId = String(req.user._id);
+      const targets = parts.filter((p) => String(p) !== senderId);
+      if (targets.length) {
+        const from = String(req.user?.name || req.user?.email || 'Someone');
+        const text = String(content || '').trim();
+        const snippet = text.length > 80 ? `${text.slice(0, 77)}...` : text;
+        const href = `/messages?conversationId=${encodeURIComponent(String(conversationId))}`;
+        const now = new Date();
+        await Notification.insertMany(
+          targets.map((uid) => ({
+            userId: uid,
+            type: 'message_new',
+            title: 'New message',
+            message: `${from}: ${snippet || 'Sent an attachment'}`,
+            href,
+            meta: { conversationId, projectId: convo?.projectId },
+            createdAt: now,
+            updatedAt: now,
+          })),
+          { ordered: false }
+        );
+      }
+    } catch {
+      // best-effort
+    }
 
     return created[0]._id;
   };
@@ -298,11 +375,23 @@ router.post('/messages/read', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Message IDs array is required' });
     }
 
+    const msgs = await Message.find({ _id: { $in: messageIds } }).select('_id conversationId sender readBy').lean();
+    const convoIds = Array.from(new Set(msgs.map((m) => String(m.conversationId))));
+    const convos = await Conversation.find({ _id: { $in: convoIds }, participants: req.user._id }).select('_id').lean();
+    const allowedConvoIds = new Set(convos.map((c) => String(c._id)));
+    const allowedMessageIds = msgs
+      .filter((m) => allowedConvoIds.has(String(m.conversationId)))
+      .map((m) => m._id);
+
+    if (!allowedMessageIds.length) {
+      return res.json({ success: true });
+    }
+
     await Message.updateMany(
-      { 
-        _id: { $in: messageIds },
+      {
+        _id: { $in: allowedMessageIds },
         sender: { $ne: req.user._id },
-        readBy: { $ne: req.user._id }
+        readBy: { $ne: req.user._id },
       },
       { $addToSet: { readBy: req.user._id } }
     );
@@ -310,6 +399,78 @@ router.post('/messages/read', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Edit a message (sender or conversation admin)
+router.patch('/messages/:messageId', authenticate, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { content } = req.body || {};
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content is required' });
+    }
+
+    const msg = await Message.findById(messageId);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    const convo = await Conversation.findById(msg.conversationId).select('admins participants');
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
+
+    const isSender = String(msg.sender) === String(req.user._id);
+    const isAdmin = Array.isArray(convo.admins) && convo.admins.some((a) => String(a) === String(req.user._id));
+    if (!isSender && !isAdmin) {
+      return res.status(403).json({ error: 'Not allowed to edit this message' });
+    }
+
+    if (msg.isDeleted) return res.status(400).json({ error: 'Cannot edit a deleted message' });
+
+    msg.content = String(content || '').trim();
+    await msg.save();
+
+    const populated = await Message.findById(msg._id).populate('sender', 'name email avatar');
+    return res.json(populated);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// Soft delete a message (sender or conversation admin)
+router.delete('/messages/:messageId', authenticate, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const msg = await Message.findById(messageId);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    const convo = await Conversation.findById(msg.conversationId).select('admins lastMessage');
+    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
+
+    const isSender = String(msg.sender) === String(req.user._id);
+    const isAdmin = Array.isArray(convo.admins) && convo.admins.some((a) => String(a) === String(req.user._id));
+    if (!isSender && !isAdmin) {
+      return res.status(403).json({ error: 'Not allowed to delete this message' });
+    }
+
+    if (msg.isDeleted) return res.json({ success: true });
+
+    msg.isDeleted = true;
+    msg.deletedAt = new Date();
+    // Optional: clear sensitive content
+    msg.content = '';
+    await msg.save();
+
+    // If it was the last message in the conversation, update lastMessage pointer
+    if (String(convo.lastMessage) === String(msg._id)) {
+      const prev = await Message.find({ conversationId: msg.conversationId, isDeleted: { $ne: true } })
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .lean();
+      await Conversation.findByIdAndUpdate(msg.conversationId, { lastMessage: prev[0]?._id || undefined });
+    }
+
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 

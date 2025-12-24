@@ -7,6 +7,7 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, Dialog
 import { Label } from "@/components/ui/label";
 import { Home, Star, Search, FolderPlus, Upload, Info, X } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = "http://localhost:5000";
 
@@ -43,11 +44,24 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Detect current user role to enable team-member self mode
+  const getCurrentUserRole = () => {
+    try {
+      const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
+      if (!raw) return "admin";
+      const u = JSON.parse(raw);
+      return u?.role || "admin";
+    } catch {
+      return "admin";
+    }
+  };
+  const currentUserRole = getCurrentUserRole();
+  const [selfEmployeeId, setSelfEmployeeId] = useState<string>("");
 
-  const canUpload = Boolean(leadId || clientId);
+  const canUpload = Boolean(leadId || clientId || selfEmployeeId);
 
   const loadFiles = async () => {
-    if (!leadId && !clientId) {
+    if (!leadId && !clientId && !selfEmployeeId) {
       setFiles([]);
       return;
     }
@@ -55,6 +69,7 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
       const params = new URLSearchParams();
       if (leadId) params.set("leadId", leadId);
       if (clientId) params.set("clientId", clientId);
+      if (selfEmployeeId) params.set("employeeId", selfEmployeeId);
       if (query.trim()) params.set("q", query.trim());
       const res = await fetch(`${API_BASE}/api/files?${params.toString()}`);
       const json = await res.json().catch(() => null);
@@ -68,7 +83,7 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
   useEffect(() => {
     loadFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadId, clientId]);
+  }, [leadId, clientId, selfEmployeeId]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -77,6 +92,23 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  // Resolve employeeId for staff self mode
+  useEffect(() => {
+    (async () => {
+      try {
+        if (currentUserRole !== "staff") return;
+        if (leadId || clientId) return; // using contextual mode
+        const res = await fetch(`${API_BASE}/api/attendance/members`, { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => []);
+        const first = Array.isArray(data) ? data[0] : null;
+        const eid = first?.employeeId ? String(first.employeeId) : "";
+        if (eid) setSelfEmployeeId(eid);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pendingTotal = useMemo(() => pendingFiles.reduce((sum, f) => sum + (f.size || 0), 0), [pendingFiles]);
 
@@ -94,10 +126,11 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
   };
 
   const uploadOne = async (f: File) => {
-    if (!leadId && !clientId) throw new Error("Missing leadId/clientId");
+    if (!leadId && !clientId && !selfEmployeeId) throw new Error("Missing context");
     const fd = new FormData();
     if (leadId) fd.append("leadId", leadId);
     if (clientId) fd.append("clientId", clientId);
+    if (selfEmployeeId) fd.append("employeeId", selfEmployeeId);
     fd.append("name", f.name);
     fd.append("file", f);
     const res = await fetch(`${API_BASE}/api/files`, { method: "POST", body: fd });
@@ -108,7 +141,7 @@ export default function Files({ leadId, clientId }: { leadId?: string; clientId?
 
   const saveUploads = async () => {
     if (!canUpload) {
-      toast.error("Open a client or lead first");
+      toast.error("Open a valid context first");
       return;
     }
     if (!pendingFiles.length) {
