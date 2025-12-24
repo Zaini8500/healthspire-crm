@@ -28,7 +28,9 @@ import { toast } from "@/components/ui/sonner";
 import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag, Clock, MessageSquare, Users, Calendar, Flag, Link2 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
+  ? "https://healthspire-crm.onrender.com"
+  : "http://localhost:5000";
 
 type Employee = { _id: string; name?: string; firstName?: string; lastName?: string; avatar?: string; image?: string };
 
