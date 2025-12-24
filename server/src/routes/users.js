@@ -13,6 +13,24 @@ const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, "..", "..");
 const uploadDir = path.join(SERVER_ROOT, "uploads");
+function normalizeAvatar(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("<")) return ""; // invalid placeholder
+  // Already relative and points to uploads
+  if (raw.startsWith("/uploads/")) return raw;
+  try {
+    const u = new URL(raw);
+    // If URL path contains /uploads/<file>, return relative path
+    if (u.pathname && /\/uploads\//.test(u.pathname)) {
+      const idx = u.pathname.indexOf("/uploads/");
+      return u.pathname.substring(idx);
+    }
+  } catch {
+    // not a full URL
+  }
+  return raw;
+}
 const avatarStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
     cb(null, uploadDir);
@@ -47,10 +65,11 @@ router.get("/me", authenticate, async (req, res) => {
       (employee ? String(employee.name || "").trim() : "") ||
       String(user?.email || "").trim();
 
-    const avatar =
+    const avatar = normalizeAvatar(
       String(user?.avatar || "").trim() ||
-      (client ? String(client.avatar || "").trim() : "") ||
-      (employee ? String(employee.avatar || "").trim() : "");
+        (client ? String(client.avatar || "").trim() : "") ||
+        (employee ? String(employee.avatar || "").trim() : "")
+    );
 
     res.json({
       user: {
@@ -178,7 +197,7 @@ router.post("/me/avatar", authenticate, uploadAvatar.single("avatar"), async (re
       await Employee.updateOne({ email }, { $set: { avatar: rel } }).catch(() => null);
     }
 
-    res.json({ user, avatar: rel });
+    res.json({ user: { ...user, avatar: normalizeAvatar(rel) }, avatar: normalizeAvatar(rel) });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -274,7 +293,7 @@ router.get("/", authenticate, async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        avatar: user.avatar,
+        avatar: normalizeAvatar(user.avatar),
         role: user.role,
       });
     }
