@@ -412,7 +412,19 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
             <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent">
               <div className="w-10 h-10 rounded-full bg-white border border-sidebar-border flex items-center justify-center font-semibold text-sidebar-foreground overflow-hidden">
                 {meAvatar ? (
-                  <img src={`${API_BASE}${meAvatar}`} alt="User" className="w-full h-full object-cover" />
+                  <img
+                    src={(() => {
+                      const a = String(meAvatar || "");
+                      if (!a) return "/api/placeholder/64/64";
+                      if (a.startsWith("http")) return a;
+                      if (a.startsWith("<")) return "/api/placeholder/64/64";
+                      const rel = a.startsWith("/") ? a : `/${a}`;
+                      return `${API_BASE}${rel}`;
+                    })()}
+                    alt="User"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <span>{meInitials}</span>
                 )}

@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import http from "node:http";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import contactsRouter from "./routes/contacts.js";
 import companiesRouter from "./routes/companies.js";
 import employeesRouter from "./routes/employees.js";
@@ -78,7 +79,9 @@ app.use((_, res, next) => {
   next();
 });
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_ROOT = path.resolve(__dirname, "..");
+const UPLOAD_DIR = path.join(SERVER_ROOT, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }

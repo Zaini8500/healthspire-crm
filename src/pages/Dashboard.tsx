@@ -56,7 +56,7 @@ import {
   PieChart as PieChartIcon,
 } from "lucide-react";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
@@ -139,6 +139,15 @@ export default function Dashboard() {
   const [onLeaveToday, setOnLeaveToday] = useState(0);
   const [projectsList, setProjectsList] = useState<ProjectRow[]>([]);
   const [tasksTable, setTasksTable] = useState<TaskRow[]>([]);
+
+  const adminAvatarSrc = useMemo(() => {
+    const a = String(meAvatar || "").trim();
+    if (!a) return "/api/placeholder/64/64";
+    if (a.startsWith("http")) return a;
+    if (a.startsWith("<")) return "/api/placeholder/64/64";
+    const rel = a.startsWith("/") ? a : `/${a}`;
+    return `${API_BASE}${rel}`;
+  }, [meAvatar]);
 
   useEffect(() => {
     (async () => {
@@ -248,7 +257,13 @@ export default function Dashboard() {
               <p className="text-3xl font-bold">${totalRevenue.toLocaleString()}</p>
             </div>
             <Avatar className="h-16 w-16 border-2 border-white bg-white">
-              <AvatarImage src={meAvatar ? `${API_BASE}${meAvatar}` : "/api/placeholder/64/64"} alt="Admin" />
+              <AvatarImage
+                src={adminAvatarSrc}
+                alt="Admin"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64";
+                }}
+              />
               <AvatarFallback className="bg-white text-blue-600 text-xl">{meInitials}</AvatarFallback>
             </Avatar>
           </div>
