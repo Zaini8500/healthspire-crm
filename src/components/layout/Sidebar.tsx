@@ -198,6 +198,27 @@ const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].i
   ? "https://healthspire-crm.onrender.com"
   : "http://localhost:5000";
 
+const normalizeAvatarSrc = (input: string) => {
+  const s = String(input || "").trim();
+  if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
+  try {
+    const isAbs = /^https?:\/\//i.test(s);
+    if (isAbs) {
+      const u = new URL(s);
+      if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
+        return `${API_BASE}${u.pathname}`;
+      }
+      if (u.pathname.includes("/uploads/")) return `${API_BASE}${u.pathname}`;
+      return s;
+    }
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    return `${API_BASE}${rel}`;
+  } catch {
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    return `${API_BASE}${rel}`;
+  }
+};
+
 export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState<string[]>([]);
@@ -413,14 +434,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
               <div className="w-10 h-10 rounded-full bg-white border border-sidebar-border flex items-center justify-center font-semibold text-sidebar-foreground overflow-hidden">
                 {meAvatar ? (
                   <img
-                    src={(() => {
-                      const a = String(meAvatar || "");
-                      if (!a) return "/api/placeholder/64/64";
-                      if (a.startsWith("http")) return a;
-                      if (a.startsWith("<")) return "/api/placeholder/64/64";
-                      const rel = a.startsWith("/") ? a : `/${a}`;
-                      return `${API_BASE}${rel}`;
-                    })()}
+                    src={normalizeAvatarSrc(String(meAvatar || ""))}
                     alt="User"
                     onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
                     className="w-full h-full object-cover"

@@ -23,6 +23,27 @@ const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].i
   ? "https://healthspire-crm.onrender.com"
   : "http://localhost:5000";
 
+const normalizeAvatarSrc = (input: string) => {
+  const s = String(input || "").trim();
+  if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
+  try {
+    const isAbs = /^https?:\/\//i.test(s);
+    if (isAbs) {
+      const u = new URL(s);
+      if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
+        return `${API_BASE}${u.pathname}`;
+      }
+      if (u.pathname.includes("/uploads/")) return `${API_BASE}${u.pathname}`;
+      return s;
+    }
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    return `${API_BASE}${rel}`;
+  } catch {
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    return `${API_BASE}${rel}`;
+  }
+};
+
 type MeUser = {
   _id?: string;
   id?: string;
@@ -295,14 +316,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
             <Button variant="ghost" className="h-10 px-2">
               <Avatar className="h-9 w-9">
                 <AvatarImage
-                  src={(() => {
-                    const a = String(me?.avatar || "");
-                    if (!a) return "/api/placeholder/64/64";
-                    if (a.startsWith("<")) return "/api/placeholder/64/64";
-                    if (a.startsWith("http")) return a;
-                    const rel = a.startsWith("/") ? a : `/${a}`;
-                    return `${API_BASE}${rel}`;
-                  })()}
+                  src={normalizeAvatarSrc(String(me?.avatar || ""))}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
                 />
                 <AvatarFallback>{meInitials}</AvatarFallback>
@@ -314,14 +328,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
               <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9">
                   <AvatarImage
-                    src={(() => {
-                      const a = String(me?.avatar || "");
-                      if (!a) return "/api/placeholder/64/64";
-                      if (a.startsWith("<")) return "/api/placeholder/64/64";
-                      if (a.startsWith("http")) return a;
-                      const rel = a.startsWith("/") ? a : `/${a}`;
-                      return `${API_BASE}${rel}`;
-                    })()}
+                    src={normalizeAvatarSrc(String(me?.avatar || ""))}
                     onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
                   />
                   <AvatarFallback>{meInitials}</AvatarFallback>

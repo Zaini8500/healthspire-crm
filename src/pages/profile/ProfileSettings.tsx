@@ -11,6 +11,33 @@ const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].i
   ? "https://healthspire-crm.onrender.com"
   : "http://localhost:5000";
 
+const normalizeAvatarSrc = (input: string, ver?: number) => {
+  const s = String(input || "").trim();
+  if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
+  try {
+    const isAbs = /^https?:\/\//i.test(s);
+    if (isAbs) {
+      const u = new URL(s);
+      if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
+        const url = `${API_BASE}${u.pathname}`;
+        return ver ? `${url}?v=${ver}` : url;
+      }
+      if (u.pathname.includes("/uploads/")) {
+        const url = `${API_BASE}${u.pathname}`;
+        return ver ? `${url}?v=${ver}` : url;
+      }
+      return ver ? `${s}?v=${ver}` : s;
+    }
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    const url = `${API_BASE}${rel}`;
+    return ver ? `${url}?v=${ver}` : url;
+  } catch {
+    const rel = s.startsWith("/") ? s : `/${s}`;
+    const url = `${API_BASE}${rel}`;
+    return ver ? `${url}?v=${ver}` : url;
+  }
+};
+
 type MeResponse = {
   user?: {
     _id?: string;
@@ -169,11 +196,7 @@ export default function ProfileSettings() {
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16 border">
               <AvatarImage
-                src={(() => {
-                  if (!avatar) return "/api/placeholder/64/64";
-                  const url = avatar.startsWith("http") ? avatar : `${API_BASE}${avatar}`;
-                  return avatarVer ? `${url}?v=${avatarVer}` : url;
-                })()}
+                src={normalizeAvatarSrc(avatar, avatarVer)}
                 onError={(e) => {
                   const img = e.currentTarget as HTMLImageElement;
                   img.src = "/api/placeholder/64/64";
