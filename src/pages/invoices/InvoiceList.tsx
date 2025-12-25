@@ -695,7 +695,8 @@ export default function InvoiceList() {
             <TabsContent value="list">
               <Card>
                 <CardContent className="p-0">
-                  <Table>
+                  <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead>Invoice ID</TableHead>
@@ -758,6 +759,7 @@ export default function InvoiceList() {
                       </TableRow>
                     </TableBody>
                   </Table>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -765,7 +767,8 @@ export default function InvoiceList() {
             <TabsContent value="recurring">
               <Card>
                 <CardContent className="p-0">
-                  <Table>
+                  <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
                         <TableHead>Invoice ID</TableHead>
@@ -785,6 +788,7 @@ export default function InvoiceList() {
                       </TableRow>
                     </TableBody>
                   </Table>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

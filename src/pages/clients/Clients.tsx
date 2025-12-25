@@ -432,7 +432,8 @@ function PanelList({ title, items, values }: { title: string; items: string[]; v
 function ContactsTable({ rows }: { rows: ContactRow[] }) {
   return (
     <Card className="p-0 overflow-hidden rounded-xl border">
-      <Table>
+      <div className="overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow className="bg-muted/40">
             <TableHead>Name</TableHead>
@@ -471,6 +472,7 @@ function ContactsTable({ rows }: { rows: ContactRow[] }) {
           ))}
         </TableBody>
       </Table>
+      </div>
     </Card>
   );
 }
@@ -577,7 +579,8 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
 
   return (
     <Card className="p-0 overflow-hidden rounded-xl border">
-      <Table>
+      <div className="overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow className="bg-muted/40">
             <TableHead className="w-12">ID</TableHead>
@@ -642,6 +645,7 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
           ))}
         </TableBody>
       </Table>
+      </div>
 
       {/* Edit dialog */}
       {editing && (

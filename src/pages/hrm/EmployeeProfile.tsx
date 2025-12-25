@@ -1,19 +1,22 @@
 import { useLocation, useParams, Link } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Mail, Phone, Send, Camera, Upload, ChevronLeft, ChevronRight } from "lucide-react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { getAuthHeaders } from "@/lib/api/auth";
+import { ImageManager } from "@/components/ImageManager";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { toast } from "@/components/ui/sonner";
-import { getAuthHeaders } from "@/lib/api/auth";
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -143,6 +146,41 @@ export default function EmployeeProfile() {
         toast.success("Profile photo updated");
       }
     } catch {}
+  };
+
+  const handleAvatarChange = async (imageBlob: Blob) => {
+    const file = new File([imageBlob], "avatar.jpg", { type: "image/jpeg" });
+    await uploadAvatar(file);
+    // Refresh employee data to get updated avatar URL
+    if (dbId) {
+      try {
+        const res = await fetch(`${API_BASE}/api/employees/${dbId}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const updatedEmp = await res.json();
+          const url = updatedEmp?.avatar ? (String(updatedEmp.avatar).startsWith("http") ? updatedEmp.avatar : `${API_BASE}${updatedEmp.avatar}`) : undefined;
+          if (url) setPhotoUrl(url);
+        }
+      } catch (error) {
+        console.error("Failed to refresh employee data:", error);
+      }
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    try {
+      if (!dbId) return;
+      const res = await fetch(`${API_BASE}/api/employees/${dbId}/avatar`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setPhotoUrl(undefined);
+        window.dispatchEvent(new Event("employeeUpdated"));
+        toast.success("Profile photo removed");
+      }
+    } catch {
+      toast.error("Failed to remove profile photo");
+    }
   };
 
   const deleteProject = async (id: string) => {
@@ -556,18 +594,15 @@ export default function EmployeeProfile() {
       <Card>
         <CardContent className="p-0">
           <div className="relative p-6 bg-primary/90 text-primary-foreground rounded-t-xl">
-            {/* Profile Pic Controls */}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPick} />
-            <div className="absolute left-0 top-1 lg:left-1 lg:top-1 flex flex-col gap-3">
-              <Button type="button" variant="ghost" size="icon" onClick={pickPhoto} className="w-8 h-8 rounded-md text-white hover:bg-white/20">
-                <Camera className="w-4 h-4" />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={pickPhoto} className="w-8 h-8 rounded-md text-white hover:bg-white/20">
-                <Upload className="w-4 h-4" />
-              </Button>
-            </div>
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div className="flex items-center gap-4">
+                <ImageManager
+                  currentImage={photoUrl}
+                  onImageChange={handleAvatarChange}
+                  onImageRemove={handleAvatarRemove}
+                  aspectRatio={1}
+                  className="flex items-center gap-4"
+                />
                 <Avatar className="w-20 h-20 ring-2 ring-primary/30 ring-offset-2 ring-offset-card shadow-md">
                   {photoUrl && <AvatarImage className="object-cover object-center" src={photoUrl} alt={name} />}
                   <AvatarFallback className="bg-white/20 text-white font-semibold">

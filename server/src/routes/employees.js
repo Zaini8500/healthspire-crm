@@ -171,4 +171,40 @@ router.delete("/:id", authenticate, isAdmin, async (req, res) => {
   }
 });
 
+router.delete("/:id/avatar", authenticate, async (req, res) => {
+  try {
+    // Staff can only update their own avatar
+    if (req.user.role === 'staff') {
+      const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
+      if (!staffEmployee) return res.status(404).json({ error: "Employee record not found" });
+      if (String(staffEmployee._id) !== String(req.params.id)) {
+        return res.status(403).json({ error: "Can only update your own avatar" });
+      }
+    }
+    
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) return res.status(404).json({ error: "Employee not found" });
+    
+    // Remove avatar file if it exists
+    if (employee.avatar && employee.avatar.startsWith("/uploads/")) {
+      const fs = require("fs");
+      const path = require("path");
+      const filePath = path.join(__dirname, "../../..", employee.avatar);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error("Failed to delete avatar file:", err);
+      }
+    }
+    
+    // Update employee record to remove avatar
+    await Employee.findByIdAndUpdate(req.params.id, { avatar: "" });
+    res.json({ message: "Avatar removed successfully" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 export default router;

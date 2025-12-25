@@ -319,4 +319,44 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+router.delete("/me/avatar", authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    
+    // Remove avatar file if it exists
+    if (user.avatar && user.avatar.startsWith("/uploads/")) {
+      const fs = require("fs");
+      const path = require("path");
+      const filePath = path.join(__dirname, "../../..", user.avatar);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error("Failed to delete avatar file:", err);
+      }
+    }
+    
+    // Update user record to remove avatar
+    await User.findByIdAndUpdate(req.user._id, { avatar: "" });
+    
+    // Also update related records
+    const role = String(user?.role || "").toLowerCase();
+    const email = String(user?.email || "").toLowerCase().trim();
+    
+    if (role === "client" && user?.clientId) {
+      await Client.updateOne({ _id: user.clientId }, { $set: { avatar: "" } }).catch(() => null);
+    }
+    
+    if (role === "staff" && email) {
+      await Employee.updateOne({ email }, { $set: { avatar: "" } }).catch(() => null);
+    }
+    
+    res.json({ message: "Avatar removed successfully" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 export default router;

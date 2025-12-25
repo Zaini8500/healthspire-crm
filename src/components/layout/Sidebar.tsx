@@ -325,26 +325,26 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
           "transition-transform duration-300 lg:transition-all",
           // width behavior
           collapsed ? "lg:w-[72px]" : "lg:w-64",
-          "w-64",
+          "w-64 max-w-[80vw]",
           // mobile drawer translate
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0"
         )}
       >
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border bg-sidebar">
-        <div className="flex items-center gap-3">
+      <div className="flex h-14 sm:h-16 items-center justify-between px-3 sm:px-4 border-b border-sidebar-border bg-sidebar">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {collapsed ? (
-            <img src="/HealthSpire%20logo.png" alt="HealthSpire" className="h-12 w-12 rounded-lg object-contain" />
+            <img src="/HealthSpire%20logo.png" alt="HealthSpire" className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-contain flex-shrink-0" />
           ) : (
-            <img src="/HealthSpire%20logo.png" alt="HealthSpire" className="h-12 w-auto max-w-[300px] object-contain" />
+            <img src="/HealthSpire%20logo.png" alt="HealthSpire" className="h-10 w-auto max-h-12 object-contain flex-shrink-0" />
           )}
         </div>
         <Button
           variant="ghost"
           size="icon-sm"
           onClick={onToggle}
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
+          className="text-sidebar-foreground hover:bg-sidebar-accent flex-shrink-0"
         >
           <ChevronLeft
             className={cn(
@@ -356,7 +356,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto py-3 sm:py-4 px-2 sm:px-3 scrollbar-thin">
         <ul className="space-y-1">
           {visibleNavigation.map((item) => (
             <li key={item.title}>
@@ -427,7 +427,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
       </nav>
 
       {/* User Profile */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-3 sm:p-4 border-t border-sidebar-border">
         {!collapsed ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent">

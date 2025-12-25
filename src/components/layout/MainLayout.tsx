@@ -29,21 +29,32 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile sidebar overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
       />
+      
       <div
         className={cn(
-          "flex flex-col transition-all duration-300",
+          "flex flex-col transition-all duration-300 min-h-screen",
           sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-64"
         )}
       >
         <TopNav onMenuClick={handleMenuClick} />
-        <main className="flex-1 p-4 lg:p-6">
-          <Outlet />
+        <main className="flex-1 p-4 sm:p-5 lg:p-6 max-w-full overflow-x-hidden">
+          <div className="w-full">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

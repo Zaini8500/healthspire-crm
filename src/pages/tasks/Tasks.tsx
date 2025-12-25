@@ -760,7 +760,8 @@ export default function Tasks() {
 
           <CardContent className="p-0">
             <TabsContent value="list" className="m-0">
-              <Table>
+              <div className="overflow-x-auto">
+                <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-20">ID</TableHead>
@@ -848,6 +849,7 @@ export default function Tasks() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </TabsContent>
 
             <TabsContent value="kanban" className="m-0">
