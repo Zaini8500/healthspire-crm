@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+﻿import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "@/lib/api/auth";
 
 const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
@@ -126,6 +127,7 @@ const announcements = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [openTasksCount, setOpenTasksCount] = useState(0);
   const [eventsToday, setEventsToday] = useState(0);
   const [pendingLeaves, setPendingLeaves] = useState(0);
@@ -143,21 +145,22 @@ export default function Dashboard() {
   const normalizeAvatarSrc = useMemo(() => (input: string) => {
     const s = String(input || "").trim();
     if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
-    try {
+    const base = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) ? "https://healthspire-crm.onrender.com" : API_BASE;
+        try {
       const isAbs = /^https?:\/\//i.test(s);
       if (isAbs) {
         const u = new URL(s);
         if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
-          return `${API_BASE}${u.pathname}`;
+          return `${base}${u.pathname}`;
         }
-        if (u.pathname.includes("/uploads/")) return `${API_BASE}${u.pathname}`;
+        if (u.pathname.includes("/uploads/")) return `${base}${u.pathname}`;
         return s;
       }
       const rel = s.startsWith("/") ? s : `/${s}`;
-      return `${API_BASE}${rel}`;
+      return `${base}${rel}`;
     } catch {
       const rel = s.startsWith("/") ? s : `/${s}`;
-      return `${API_BASE}${rel}`;
+      return `${base}${rel}`;
     }
   }, [API_BASE]);
 
@@ -467,19 +470,19 @@ export default function Dashboard() {
               <CardTitle className="text-lg">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/projects") }>
                 <Plus className="w-4 h-4 mr-2" />
                 New Project
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/hrm/employees") }>
                 <Users className="w-4 h-4 mr-2" />
                 Add Team Member
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/invoices") }>
                 <FileText className="w-4 h-4 mr-2" />
                 Create Invoice
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/settings") }>
                 <Settings className="w-4 h-4 mr-2" />
                 System Settings
               </Button>
@@ -655,3 +658,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+

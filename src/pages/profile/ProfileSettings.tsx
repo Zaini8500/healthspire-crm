@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { ImageManager } from "@/components/ImageManager";
 const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
   ? "https://healthspire-crm.onrender.com"
   : "http://localhost:5000";
+const RENDER_BASE = "https://healthspire-crm.onrender.com";
+const ASSET_BASE = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) ? RENDER_BASE : API_BASE;
 
 const normalizeAvatarSrc = (input: string, ver?: number) => {
   const s = String(input || "").trim();
@@ -20,21 +22,21 @@ const normalizeAvatarSrc = (input: string, ver?: number) => {
     if (isAbs) {
       const u = new URL(s);
       if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
-        const url = `${API_BASE}${u.pathname}`;
+        const url = `${ASSET_BASE}${u.pathname}`;
         return ver ? `${url}?v=${ver}` : url;
       }
       if (u.pathname.includes("/uploads/")) {
-        const url = `${API_BASE}${u.pathname}`;
+        const url = `${ASSET_BASE}${u.pathname}`;
         return ver ? `${url}?v=${ver}` : url;
       }
       return ver ? `${s}?v=${ver}` : s;
     }
     const rel = s.startsWith("/") ? s : `/${s}`;
-    const url = `${API_BASE}${rel}`;
+    const url = `${ASSET_BASE}${rel}`;
     return ver ? `${url}?v=${ver}` : url;
   } catch {
     const rel = s.startsWith("/") ? s : `/${s}`;
-    const url = `${API_BASE}${rel}`;
+    const url = `${ASSET_BASE}${rel}`;
     return ver ? `${url}?v=${ver}` : url;
   }
 };
@@ -207,7 +209,7 @@ export default function ProfileSettings() {
   };
 
   if (loading) {
-    return <div className="text-sm text-muted-foreground">Loading profile…</div>;
+    return <div className="text-sm text-muted-foreground">Loading profileâ€¦</div>;
   }
 
   return (
@@ -281,3 +283,5 @@ export default function ProfileSettings() {
     </div>
   );
 }
+
+

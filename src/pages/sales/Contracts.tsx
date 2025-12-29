@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,8 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
-import { RefreshCw, Search, Plus, Paperclip, Mic, Trash2 } from "lucide-react";
+import { RefreshCw, Search, Plus, Paperclip, Mic, Trash2, FileText, Edit3, MoreVertical } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -39,6 +41,7 @@ export default function Contracts() {
 
   const [rows, setRows] = useState<ContractRow[]>([]);
   const [projects, setProjects] = useState<ProjectDoc[]>([]);
+  const [clientLeadOptions, setClientLeadOptions] = useState<string[]>([]);
 
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("");
@@ -49,6 +52,7 @@ export default function Contracts() {
   const [formTax2, setFormTax2] = useState("0");
   const [formAmount, setFormAmount] = useState("0");
   const [formNote, setFormNote] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const projectTitleById = useMemo(() => {
     const m = new Map<string, string>();
@@ -60,12 +64,31 @@ export default function Contracts() {
 
   const loadProjects = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/projects`);
+      const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      const headers: any = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res = await fetch(`${API_BASE}/api/projects`, { headers });
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
       setProjects(Array.isArray(data) ? data : []);
     } catch {
       toast.error("Failed to load projects");
+    }
+  };
+
+  const loadClientsLeads = async () => {
+    try {
+      const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      const headers: any = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const [rc, rl] = await Promise.all([
+        fetch(`${API_BASE}/api/clients`, { headers }).then((r) => r.ok ? r.json() : []),
+        fetch(`${API_BASE}/api/leads`, { headers }).then((r) => r.ok ? r.json() : []),
+      ]);
+      const clients: string[] = (Array.isArray(rc) ? rc : []).map((c: any) => c.company || c.person || c.name).filter(Boolean);
+      const leads: string[] = (Array.isArray(rl) ? rl : []).map((l: any) => l.name || l.fullName || l.company || l.email).filter(Boolean);
+      const all = Array.from(new Set([...(clients || []), ...(leads || [])])).slice(0, 500);
+      setClientLeadOptions(all);
+    } catch {
+      // silent; optional source
     }
   };
 
@@ -95,6 +118,7 @@ export default function Contracts() {
 
   useEffect(() => {
     loadProjects();
+    loadClientsLeads();
     loadContracts();
   }, []);
 
@@ -117,6 +141,7 @@ export default function Contracts() {
   const pageRows = useMemo(() => filteredRows.slice(0, pageSizeNum), [filteredRows, pageSizeNum]);
 
   const openNew = () => {
+    setEditingId(null);
     setFormTitle("");
     setFormClient("");
     setFormProjectId("-");
@@ -135,7 +160,7 @@ export default function Contracts() {
       if (!title) return toast.error("Title is required");
       const payload: any = {
         title,
-        client: formClient || "",
+        client: formClient && formClient !== "-" ? formClient : "",
         projectId: formProjectId !== "-" ? formProjectId : undefined,
         contractDate: formContractDate ? new Date(formContractDate).toISOString() : undefined,
         validUntil: formValidUntil ? new Date(formValidUntil).toISOString() : undefined,
@@ -144,16 +169,29 @@ export default function Contracts() {
         amount: Number(formAmount || 0),
         note: formNote || "",
       };
-      const res = await fetch(`${API_BASE}/api/contracts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const isEdit = Boolean(editingId);
+      const url = isEdit ? `${API_BASE}/api/contracts/${editingId}` : `${API_BASE}/api/contracts`;
+      const method = isEdit ? "PATCH" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const d = await res.json().catch(() => null);
       if (!res.ok) throw new Error(d?.error || "Failed to add contract");
-      toast.success("Contract created");
+      toast.success(isEdit ? "Contract updated" : "Contract created");
       setOpenAdd(false);
-      await loadContracts();
+      if (isEdit) {
+        setRows((prev) => prev.map((r) => (r.id === editingId ? {
+          id: String(d._id || editingId),
+          title: d.title || payload.title,
+          client: d.client || payload.client || "-",
+          projectId: d.projectId ? String(d.projectId) : undefined,
+          contractDate: d.contractDate ? new Date(d.contractDate).toISOString().slice(0, 10) : (formContractDate || "-"),
+          validUntil: d.validUntil ? new Date(d.validUntil).toISOString().slice(0, 10) : (formValidUntil || "-"),
+          amount: Number(d.amount ?? payload.amount ?? 0),
+          status: d.status || "Open",
+          note: d.note || payload.note || "",
+        } : r)));
+      } else {
+        await loadContracts();
+      }
     } catch (e: any) {
       toast.error(e?.message || "Failed to add contract");
     }
@@ -171,6 +209,76 @@ export default function Contracts() {
     }
   };
 
+  const patchStatus = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/contracts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error || "Failed");
+      setRows((p) => p.map((r) => (r.id === id ? { ...r, status } : r)));
+      toast.success(`Marked as ${status}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed");
+    }
+  };
+
+  const cloneContract = async (id: string) => {
+    try {
+      const src = rows.find((r) => r.id === id);
+      if (!src) return;
+      const getRes = await fetch(`${API_BASE}/api/contracts/${id}`);
+      const doc = await getRes.json().catch(() => null);
+      if (!getRes.ok) throw new Error(doc?.error || "Failed to clone");
+      delete doc._id; delete doc.id; delete doc.createdAt; delete doc.updatedAt;
+      const res = await fetch(`${API_BASE}/api/contracts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error || "Failed");
+      toast.success("Contract cloned");
+      await loadContracts();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to clone");
+    }
+  };
+
+  const openPreview = (id: string) => {
+    window.open(`/sales/contracts/${id}/preview`, "_blank", "noopener,noreferrer");
+  };
+
+  const openEditDialog = async (id: string) => {
+    try {
+      const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+      const headers: any = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const r = await fetch(`${API_BASE}/api/contracts/${id}`, { headers });
+      let d: any = null;
+      try { d = await r.json(); } catch { d = null; }
+      if (!r.ok) {
+        const msg = d?.error || `Failed to load contract (HTTP ${r.status})`;
+        throw new Error(msg);
+      }
+      setEditingId(id);
+      setFormTitle(d.title || "");
+      setFormClient(d.client || "");
+      setFormProjectId(d.projectId ? String(d.projectId) : "-");
+      setFormContractDate(d.contractDate ? new Date(d.contractDate).toISOString().slice(0,10) : "");
+      setFormValidUntil(d.validUntil ? new Date(d.validUntil).toISOString().slice(0,10) : "");
+      setFormTax1(String(d.tax1 ?? 0));
+      setFormTax2(String(d.tax2 ?? 0));
+      setFormAmount(String(d.amount ?? 0));
+      setFormNote(d.note || "");
+      setOpenAdd(true);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to open editor");
+    }
+  };
+
+  const statusBadge = (s?: string) => {
+    const t = String(s || "Draft").toLowerCase();
+    const base = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
+    if (t === "accepted") return <span className={`${base} bg-emerald-100 text-emerald-700`}>Accepted</span>;
+    if (t === "declined" || t === "rejected") return <span className={`${base} bg-red-100 text-red-700`}>Declined</span>;
+    if (t === "sent") return <span className={`${base} bg-blue-100 text-blue-700`}>Sent</span>;
+    return <span className={`${base} bg-gray-100 text-gray-700`}>Draft</span>;
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -178,7 +286,7 @@ export default function Contracts() {
         <Dialog open={openAdd} onOpenChange={setOpenAdd}>
           <DialogTrigger asChild><Button variant="outline" size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-2"/>Add contract</Button></DialogTrigger>
           <DialogContent className="bg-card">
-            <DialogHeader><DialogTitle>Add contract</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? "Edit contract" : "Add contract"}</DialogTitle></DialogHeader>
             <div className="grid gap-3 sm:grid-cols-12">
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Title</div>
               <div className="sm:col-span-9"><Input placeholder="Title" value={formTitle} onChange={(e)=>setFormTitle(e.target.value)} /></div>
@@ -190,7 +298,17 @@ export default function Contracts() {
               <div className="sm:col-span-9"><Input type="date" placeholder="Valid until" value={formValidUntil} onChange={(e)=>setFormValidUntil(e.target.value)} /></div>
 
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client/Lead</div>
-              <div className="sm:col-span-9"><Input placeholder="Client/Lead" value={formClient} onChange={(e)=>setFormClient(e.target.value)} /></div>
+              <div className="sm:col-span-9">
+                <Select value={formClient || "-"} onValueChange={(v)=> setFormClient(v === "-" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Client/Lead" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="-">Client/Lead</SelectItem>
+                    {clientLeadOptions.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Project</div>
               <div className="sm:col-span-9">
@@ -278,18 +396,29 @@ export default function Contracts() {
             <TableBody>
               {pageRows.length ? pageRows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="whitespace-nowrap">{shortId(r.id)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Link to={`/sales/contracts/${r.id}`} className="text-primary hover:underline">{shortId(r.id)}</Link>
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{r.title}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.client}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.projectId ? (projectTitleById.get(r.projectId) || "-") : "-"}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.contractDate}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.validUntil}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.amount.toLocaleString()}</TableCell>
-                  <TableCell className="whitespace-nowrap">{r.status || "-"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{statusBadge(r.status)}</TableCell>
                   <TableCell className="text-right">
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => deleteRow(r.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="ghost" size="icon">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openPreview(r.id)}><FileText className="w-4 h-4 mr-2"/>Preview</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEditDialog(r.id)}><Edit3 className="w-4 h-4 mr-2"/>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { if (confirm("Delete this contract?")) deleteRow(r.id); }} className="text-red-600 focus:text-red-600"><Trash2 className="w-4 h-4 mr-2"/>Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               )) : (

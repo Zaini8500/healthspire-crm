@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,12 +41,12 @@ export default function Attendance() {
 
   const API_BASE = (import.meta as any)?.env?.VITE_API_BASE || "http://localhost:5000";
 
-  const toAbsoluteAvatar = (v?: string) => {
+  const toAbsoluteAvatar = (v?: string) => {    const base = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) ? "https://healthspire-crm.onrender.com" : API_BASE;
     if (!v) return "";
     const s = String(v);
     if (!s) return "";
     if (s.startsWith("http://") || s.startsWith("https://")) return s;
-    return `${API_BASE}${s.startsWith("/") ? "" : "/"}${s}`;
+    return `${base}${s.startsWith("/") ? "" : "/"}${s}`;
   };
 
   const refresh = async () => {
@@ -580,3 +580,5 @@ export default function Attendance() {
     </div>
   );
 }
+
+

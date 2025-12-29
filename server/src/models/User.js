@@ -18,4 +18,10 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add indexes for faster authentication queries
+UserSchema.index({ email: 1 });
+UserSchema.index({ username: 1 });
+UserSchema.index({ role: 1, status: 1 });
+UserSchema.index({ email: 1, role: 1 });
+
 export default mongoose.models.User || mongoose.model("User", UserSchema);

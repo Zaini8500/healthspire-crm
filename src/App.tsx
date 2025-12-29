@@ -45,6 +45,8 @@ import OrderDetailPage from "./pages/sales/OrderDetailPage";
 import Payments from "./pages/sales/Payments";
 import Items from "./pages/sales/Items";
 import Contracts from "./pages/sales/Contracts";
+import ContractDetail from "./pages/sales/ContractDetail";
+import ContractPreview from "./pages/sales/ContractPreview";
 import Expenses from "./pages/sales/Expenses";
 import EstimateList from "./pages/prospects/EstimateList";
 import EstimateDetail from "./pages/prospects/EstimateDetail";
@@ -103,6 +105,15 @@ const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?
   } catch {
     return null;
   }
+};
+
+const ContractPreviewAccess = () => {
+  const hasToken = Boolean(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"));
+  const location = useLocation();
+  const sp = new URLSearchParams(location.search || "");
+  const isPrintMode = sp.get("print") === "1";
+  const isPdfMode = sp.get("mode") === "pdf";
+  return hasToken || isPrintMode || isPdfMode ? <ContractPreview /> : <Navigate to="/auth" replace />;
 };
 
 const normalizePerms = (p?: any): Set<string> => {
@@ -214,6 +225,9 @@ const App = () => (
           {/* Public/print-safe estimate preview */}
           <Route path="/prospects/estimates/:id/preview" element={<EstimatePreviewAccess />} />
 
+          {/* Public/print-safe contract preview */}
+          <Route path="/sales/contracts/:id/preview" element={<ContractPreviewAccess />} />
+
           {/* Protected app */}
           <Route
             element={
@@ -276,6 +290,8 @@ const App = () => (
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetails />} />
             <Route path="/orders" element={<Orders />} />
+            {/* Alias route so Sidebar link /sales/orders resolves to the same Orders list */}
+            <Route path="/sales/orders" element={<Orders />} />
             <Route path="/sales/orders/:id" element={<OrderDetailPage />} />
             <Route path="/sales/store" element={<Store />} />
             <Route path="/sales/checkout" element={<Checkout />} />
@@ -283,6 +299,7 @@ const App = () => (
             <Route path="/sales/expenses" element={<Expenses />} />
             <Route path="/sales/items" element={<Items />} />
             <Route path="/sales/contracts" element={<Contracts />} />
+            <Route path="/sales/contracts/:id" element={<ContractDetail />} />
             {/* Prospects */}
             <Route path="/prospects/estimates" element={<EstimateList />} />
             <Route path="/prospects/estimates/:id" element={<EstimateDetail />} />

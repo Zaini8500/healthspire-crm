@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +29,29 @@ export function ImageManager({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imageSrc, setImageSrc] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+
+  const assetBase = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname))
+    ? "https://healthspire-crm.onrender.com"
+    : "";
+
+  const displayImage = useMemo(() => {
+    const s = String(currentImage || "").trim();
+    if (!s) return s;
+    try {
+      const isAbs = /^https?:\/\//i.test(s);
+      if (isAbs) {
+        const u = new URL(s);
+        if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
+          return `${"https://healthspire-crm.onrender.com"}${u.pathname}`;
+        }
+        return s;
+      }
+      if (s.startsWith("/uploads/") && assetBase) return `${assetBase}${s}`;
+      return s;
+    } catch {
+      return s;
+    }
+  }, [currentImage]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -93,7 +116,7 @@ export function ImageManager({
       <div className={`flex items-center gap-4 ${className}`}>
         <Avatar className="h-16 w-16 border">
           <AvatarImage
-            src={currentImage}
+            src={displayImage}
             alt="Current image"
             className="object-cover"
           />
@@ -155,7 +178,7 @@ export function ImageManager({
           </DialogHeader>
           <div className="flex justify-center">
             <img
-              src={currentImage}
+              src={displayImage}
               alt="Full size image"
               className="max-w-full max-h-96 object-contain rounded-lg"
             />

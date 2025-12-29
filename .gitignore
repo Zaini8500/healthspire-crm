@@ -32,3 +32,5 @@ server/uploads/
 
 # Ignore vite timestamp artifacts
 *.timestamp-*.mjs
+
+!.vscode/settings.json

@@ -1,4 +1,4 @@
-import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Monitor, Globe, Mail, Settings, CheckCircle } from "lucide-react";
+﻿import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Globe, Mail, Settings, CheckCircle, Sun, Moon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
+import { useTheme } from "next-themes";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -26,21 +27,22 @@ const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].i
 const normalizeAvatarSrc = (input: string) => {
   const s = String(input || "").trim();
   if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
+  const base = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) ? "https://healthspire-crm.onrender.com" : API_BASE;
   try {
     const isAbs = /^https?:\/\//i.test(s);
     if (isAbs) {
       const u = new URL(s);
       if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
-        return `${API_BASE}${u.pathname}`;
+        return `${base}${u.pathname}`;
       }
-      if (u.pathname.includes("/uploads/")) return `${API_BASE}${u.pathname}`;
+      if (u.pathname.includes("/uploads/")) return `${base}${u.pathname}`;
       return s;
     }
     const rel = s.startsWith("/") ? s : `/${s}`;
-    return `${API_BASE}${rel}`;
+    return `${base}${rel}`;
   } catch {
     const rel = s.startsWith("/") ? s : `/${s}`;
-    return `${API_BASE}${rel}`;
+    return `${base}${rel}`;
   }
 };
 
@@ -107,6 +109,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
     if (i < logoCandidates.length - 1) setLogoSrc(logoCandidates[i + 1]);
   };
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -240,20 +243,76 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         >
           <Menu className="w-5 h-5" />
         </Button>
-        <div className="hidden lg:flex items-center gap-5">
-          <CheckCircle className="w-5 h-5" />
-          <LayoutGrid className="w-5 h-5" />
-          <Briefcase className="w-5 h-5" />
-          <Monitor className="w-5 h-5" />
+        <div className="hidden lg:flex items-center gap-2">
+          <Button variant="ghost" size="icon" title="Tasks" onClick={()=>navigate("/tasks")}>
+            <CheckCircle className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" title="Projects" onClick={()=>navigate("/projects")}>
+            <LayoutGrid className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" title="Sales" onClick={()=>navigate("/sales")}>
+            <Briefcase className="w-5 h-5" />
+          </Button>
         </div>
       </div>
 
       {/* Right Section: icons + avatar + brand */}
       <div className="flex items-center gap-3 text-muted-foreground">
-        <Button variant="ghost" size="icon" className="hidden sm:flex"><Search className="w-5 h-5" /></Button>
-        <Button variant="ghost" size="icon" className="hidden sm:flex"><Plus className="w-5 h-5" /></Button>
-        <Button variant="ghost" size="icon" className="hidden md:flex"><Globe className="w-5 h-5" /></Button>
-        <Button variant="ghost" size="icon" className="hidden md:flex"><Settings className="w-5 h-5" /></Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden sm:flex"
+          title="Search"
+          onClick={() => navigate("/tasks")}
+        >
+          <Search className="w-5 h-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden sm:flex"
+          title="Create"
+          onClick={() => navigate("/projects")}
+        >
+          <Plus className="w-5 h-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex"
+          title="Localization"
+          onClick={() => navigate("/settings/localization")}
+        >
+          <Globe className="w-5 h-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex"
+          title="Settings"
+          onClick={() => navigate("/settings")}
+        >
+          <Settings className="w-5 h-5" />
+        </Button>
+        {/* Theme Toggle (global) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9" title="Theme">
+              {theme === "dark" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={(e)=>{e.preventDefault(); setTheme("light");}}>
+              <Sun className="mr-2 h-4 w-4" /> Light
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={(e)=>{e.preventDefault(); setTheme("dark");}}>
+              <Moon className="mr-2 h-4 w-4" /> Dark
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={(e)=>{e.preventDefault(); setTheme("system");}}>
+              <Settings className="mr-2 h-4 w-4" /> System
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {/* Notifications */}
         <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
           <DropdownMenuTrigger asChild>
@@ -308,7 +367,15 @@ export function TopNav({ onMenuClick }: TopNavProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button variant="ghost" size="icon" className="hidden sm:flex"><Mail className="w-5 h-5" /></Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden sm:flex"
+          title="Messages"
+          onClick={() => navigate("/messages")}
+        >
+          <Mail className="w-5 h-5" />
+        </Button>
 
         {/* User Menu + Brand */}
         <DropdownMenu>
@@ -356,3 +423,4 @@ export function TopNav({ onMenuClick }: TopNavProps) {
     </header>
   );
 }
+

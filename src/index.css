@@ -59,14 +59,14 @@
     
     /* Sidebar (Light White Theme) */
     --sidebar-background: 0 0% 100%; /* white */
-    --sidebar-foreground: 220 20% 20%; /* dark text */
+    --sidebar-foreground: 220 15% 15%; /* darker text for better contrast */
     --sidebar-primary: 268 85% 58%; /* brand purple for accents */
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 14% 96%; /* light gray hover */
-    --sidebar-accent-foreground: 220 20% 20%; /* dark text on hover */
+    --sidebar-accent-foreground: 220 15% 15%; /* darker text on hover */
     --sidebar-border: 225 11% 90%; /* subtle divider */
     --sidebar-ring: 268 85% 58%; /* purple focus ring */
-    --sidebar-muted: 220 10% 45%;
+    --sidebar-muted: 220 8% 50%; /* better contrast for muted text */
     
     /* Chart Colors */
     --chart-1: 217 92% 60%; /* blue */
@@ -104,14 +104,18 @@
     --secondary-foreground: 220 10% 90%;
     
     --muted: 220 20% 16%;
-    --muted-foreground: 220 10% 60%;
+    --muted-foreground: 220 10% 78%;
     
     --border: 220 25% 20%;
     --input: 220 25% 18%;
     
     --sidebar-background: 220 30% 6%;
+    --sidebar-foreground: 220 10% 96%; /* brighter text for dark sidebar */
     --sidebar-accent: 220 25% 12%;
+    --sidebar-accent-foreground: 220 12% 96%; /* bright text on hover/active */
     --sidebar-border: 220 25% 15%;
+    --sidebar-muted: 220 8% 65%; /* muted but readable */
+    --sidebar-primary-foreground: 0 0% 100%;
   }
 }
 
@@ -248,6 +252,16 @@
   
   .sidebar-nav-item.active {
     @apply bg-sidebar-primary text-sidebar-primary-foreground font-medium;
+  }
+  /* Dark mode: ensure higher contrast for sidebar links */
+  .dark .sidebar-nav-item {
+    @apply text-sidebar-foreground;
+  }
+  .dark .sidebar-nav-item.active {
+    @apply bg-sidebar-primary text-sidebar-primary-foreground;
+  }
+  .dark .sidebar-nav-item:hover {
+    @apply text-sidebar-accent-foreground;
   }
   
   /* Neumorphic Card */

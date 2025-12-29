@@ -137,6 +137,14 @@ router.put("/:id", authenticate, async (req, res) => {
 
 router.post("/:id/avatar", authenticate, upload.single("avatar"), async (req, res) => {
   try {
+    console.log('Avatar upload request:', {
+      params: req.params,
+      user: req.user?.email,
+      userRole: req.user?.role,
+      file: req.file ? 'received' : 'none',
+      headers: req.headers['content-type']
+    });
+    
     // Staff can only update their own avatar
     if (req.user.role === 'staff') {
       const staffEmployee = await Employee.findOne({ email: req.user.email }).lean();
@@ -146,7 +154,10 @@ router.post("/:id/avatar", authenticate, upload.single("avatar"), async (req, re
       }
     }
     
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    if (!req.file) {
+      console.log('Avatar upload failed: No file received');
+      return res.status(400).json({ error: "No file uploaded" });
+    }
     const avatarPath = `/uploads/${req.file.filename}`;
     const doc = await Employee.findByIdAndUpdate(
       req.params.id,

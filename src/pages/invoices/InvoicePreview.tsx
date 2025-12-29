@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 
 const API_BASE = "http://localhost:5000";
 
@@ -260,61 +262,86 @@ export default function InvoicePreview() {
 /* PDF generation uses screen CSS, not @media print. */
 .pdf-mode { padding: 0 !important; background: white !important; min-height: auto !important; }
 .pdf-mode .invoice-card { box-shadow: none !important; border: none !important; max-width: none !important; width: 210mm !important; overflow: visible !important; }
-.pdf-mode .invoice-scale { transform: scale(0.76); transform-origin: top left; width: calc(210mm / 0.76) !important; }
-.pdf-mode .invoice-card .p-8 { padding: 14px !important; }
-.pdf-mode .invoice-card .p-6 { padding: 12px !important; }
-.pdf-mode .invoice-card .py-4 { padding-top: 10px !important; padding-bottom: 10px !important; }
+.pdf-mode .invoice-scale { transform: none !important; transform-origin: initial !important; width: 210mm !important; }
+.pdf-mode .invoice-card .p-8 { padding: 12px !important; }
+.pdf-mode .invoice-card .p-6 { padding: 10px !important; }
+.pdf-mode .invoice-card .py-4 { padding-top: 8px !important; padding-bottom: 8px !important; }
 .pdf-mode .invoice-card .pb-8 { padding-bottom: 16px !important; }
 .pdf-mode .invoice-card .mt-4 { margin-top: 10px !important; }
 .pdf-mode .invoice-card .gap-12 { gap: 20px !important; }
+/* Ensure footer stays at bottom for PDF render and fill A4 height */
+.pdf-mode .invoice-page { display: flex; flex-direction: column; min-height: 297mm; }
+.pdf-mode .invoice-footer { margin-top: auto; padding: 10px 12px !important; }
+.pdf-mode .invoice-footer .text-sm { font-size: 11px !important; }
+.pdf-mode .invoice-footer .text-xs { font-size: 10px !important; }
+/* tighten header for PDF mode */
+.pdf-mode .invoice-header { padding-top: 12px !important; padding-bottom: 8px !important; border-bottom-width: 2px !important; }
+.pdf-mode .invoice-title { font-size: 36px !important; line-height: 1.12 !important; padding-top: 6px !important; padding-bottom: 6px !important; border-width: 1px !important; box-shadow: none !important; }
+.pdf-mode .inv-meta { margin-top: 4px !important; }
 
 @media print {
-  @page { size: A4 portrait; margin: 4mm; }
+  @page { size: A4 portrait; margin: 0; }
   html, body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .print\:hidden { display: none !important; }
   .invoice-preview { padding: 0 !important; background: white !important; min-height: auto !important; }
   .invoice-card { box-shadow: none !important; border: none !important; max-width: none !important; width: 210mm !important; overflow: visible !important; }
-  .invoice-scale { transform: scale(0.82); transform-origin: top left; width: calc(210mm / 0.82) !important; }
-  .invoice-card .p-8 { padding: 16px !important; }
-  .invoice-card .p-6 { padding: 14px !important; }
-  .invoice-card .py-4 { padding-top: 10px !important; padding-bottom: 10px !important; }
-  .invoice-card .pb-8 { padding-bottom: 16px !important; }
-  .invoice-card .mt-4 { margin-top: 10px !important; }
+  .invoice-scale { transform: none !important; transform-origin: initial !important; width: 210mm !important; }
+  /* Reduce internal paddings in print */
+  .invoice-card .p-8 { padding: 10px !important; }
+  .invoice-card .p-6 { padding: 8px !important; }
+  .invoice-card .py-4 { padding-top: 6px !important; padding-bottom: 6px !important; }
+  .invoice-card thead th { padding: 8px !important; }
+  .invoice-card th, .invoice-card td { padding: 6px 8px !important; }
+  .invoice-card .pb-8 { padding-bottom: 12px !important; }
+  .invoice-card .mt-4 { margin-top: 8px !important; }
   .invoice-card .gap-12 { gap: 20px !important; }
   table, tr, td, th { page-break-inside: avoid !important; break-inside: avoid !important; }
+  /* Ensure footer stays at bottom for print and page fills A4 */
+  .invoice-page { display: flex; flex-direction: column; min-height: 297mm; }
+  .invoice-footer { margin-top: auto; padding: 8px 12px !important; }
+  .invoice-footer .text-sm { font-size: 11px !important; }
+  .invoice-footer .text-xs { font-size: 10px !important; }
+  /* tighten header for print */
+  .invoice-header { padding-top: 12px !important; padding-bottom: 8px !important; border-bottom-width: 2px !important; }
+  .invoice-title { font-size: 34px !important; line-height: 1.12 !important; padding-top: 6px !important; padding-bottom: 6px !important; border-width: 1px !important; box-shadow: none !important; }
+  .inv-meta { margin-top: 4px !important; }
 }
       `}</style>
       <div className={`flex items-center justify-end mb-3 print:hidden ${viewMode.isPdf ? "hidden" : ""}`}>
         <Button variant="outline" onClick={() => navigate(-1)}>Close</Button>
       </div>
       <div className="invoice-card bg-white shadow-lg mx-auto max-w-5xl border rounded-lg overflow-hidden">
-        <div className="invoice-scale" ref={pdfTargetRef}>
+        <div className="invoice-scale invoice-page" ref={pdfTargetRef}>
         {/* HealthSpire Header */}
-        <div className="p-6 border-b bg-white">
+        <div className="pt-12 pb-8 px-8 border-b-4 border-sky-600 bg-gradient-to-r from-sky-50 to-blue-50 invoice-header">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <img src={viewBrand.logo} alt={viewBrand.name} className="h-20 w-20 object-contain" />
+            <div className="flex items-center gap-5">
+              <img src={viewBrand.logo} alt={viewBrand.name} className="h-32 w-32 object-contain drop-shadow-lg" />
               <div>
-                <div className="text-xl font-bold text-sky-700">{viewBrand.name}</div>
-                <div className="text-xs text-gray-600">{viewBrand.website}</div>
+                <div className="text-4xl font-extrabold text-sky-800 leading-tight">{viewBrand.name}</div>
+                <div className="text-sm text-gray-600">{viewBrand.website}</div>
               </div>
             </div>
-            <div className="text-xs text-gray-700 text-right">
-              <div className="flex gap-6">
+            <div className="text-sm text-gray-700 text-right">
+              <div className="grid grid-cols-1 gap-1">
                 <div>📞 {viewBrand.phone}</div>
                 <div>✉️ {viewBrand.email}</div>
                 <div>📍 {viewBrand.address}</div>
               </div>
             </div>
           </div>
-          <div className="mt-4 border-t pt-4 text-center">
-            <div className="text-3xl font-extrabold text-sky-700 tracking-wide">INVOICE</div>
-            <div className="mt-2 flex items-center justify-between text-sm text-gray-700">
-              <div className="font-semibold">INVOICE TO: <span className="ml-2 font-normal">{formatClient(inv?.client)}</span></div>
-              <div className="flex gap-6">
-                <div>Number: {inv?.number || id}</div>
-                <div>Date: {inv?.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '-'}</div>
-                <div>Due: {inv?.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '-'}</div>
+          <div className="mt-6">
+            <div className="text-6xl font-black text-sky-900 tracking-widest text-center uppercase bg-white py-4 rounded-lg shadow-lg border-2 border-sky-600 invoice-title">Invoice</div>
+            <div className="mt-4 grid grid-cols-2 gap-4 items-end text-sm text-gray-700 inv-meta">
+              <div className="font-semibold">
+                INVOICE TO: <span className="ml-2 font-normal">{formatClient(inv?.client)}</span>
+              </div>
+              <div className="flex justify-end">
+                <div className="bg-gray-50 border rounded-lg px-4 py-2 grid grid-cols-3 gap-6">
+                  <div>Number: {inv?.number || id}</div>
+                  <div>Date: {inv?.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '-'}</div>
+                  <div>Due: {inv?.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '-'}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -358,39 +385,39 @@ export default function InvoicePreview() {
 
         {/* Items Table */}
         <div className="p-8">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100 border-b-2 border-gray-300">
-                <th className="text-left p-4 font-semibold text-gray-700">Item Description</th>
-                <th className="text-center p-4 w-32 font-semibold text-gray-700">Quantity</th>
-                <th className="text-right p-4 w-32 font-semibold text-gray-700">Price</th>
-                <th className="text-right p-4 w-40 font-semibold text-gray-700">Total</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full">
+            <TableHeader>
+              <TableRow className="bg-gray-100 border-b-2 border-gray-300">
+                <TableHead className="text-left p-4 font-semibold text-gray-700">Item Description</TableHead>
+                <TableHead className="text-center p-4 w-32 font-semibold text-gray-700">Quantity</TableHead>
+                <TableHead className="text-right p-4 w-32 font-semibold text-gray-700">Price</TableHead>
+                <TableHead className="text-right p-4 w-40 font-semibold text-gray-700">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {inv?.items?.length ? (
                 inv.items.map((it:any, idx:number)=> (
-                  <tr key={idx} className="border-b hover:bg-gray-50">
-                    <td className="p-4">
+                  <TableRow key={idx} className="border-b hover:bg-gray-50">
+                    <TableCell className="p-4">
                       <div className="font-medium text-gray-900">{it.name || it.title || '-'}</div>
                       {it.description && (
                         <div className="text-sm text-gray-500 mt-1">{it.description}</div>
                       )}
-                    </td>
-                    <td className="p-4 text-center">{(it.quantity ?? it.qty) ?? '-'}</td>
-                    <td className="p-4 text-right">Rs.{Number(it.rate ?? 0).toLocaleString()}</td>
-                    <td className="p-4 text-right font-medium">Rs.{(Number(it.quantity ?? it.qty ?? 0) * Number(it.rate ?? 0)).toLocaleString()}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="p-4 text-center">{(it.quantity ?? it.qty) ?? '-'}</TableCell>
+                    <TableCell className="p-4 text-right">Rs.{Number(it.rate ?? 0).toLocaleString()}</TableCell>
+                    <TableCell className="p-4 text-right font-medium">Rs.{(Number(it.quantity ?? it.qty ?? 0) * Number(it.rate ?? 0)).toLocaleString()}</TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={4} className="p-8 text-center text-gray-500">
+                <TableRow>
+                  <TableCell colSpan={4} className="p-8 text-center text-gray-500">
                     No items specified. Total amount: Rs.{subTotal.toFixed(2)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* Notes and Labels */}
@@ -476,7 +503,7 @@ export default function InvoicePreview() {
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-900 text-white p-6 text-center">
+        <div className="invoice-footer bg-gray-900 text-white p-6 text-center">
           <div className="text-sm space-y-1">
             <div>Thank you for your business!</div>
             <div className="text-xs text-gray-400">

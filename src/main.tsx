@@ -3,10 +3,11 @@ import App from "./App.tsx";
 import "./index.css";
 import { ThemeProvider } from "next-themes";
 
-// Runtime rewrite for Option B: point localhost API calls to Render backend
+// Runtime rewrite helper: only proxy to Render when NOT on localhost
 const RENDER_BASE = "https://healthspire-crm.onrender.com";
 const LOCAL_BASE = "http://localhost:5000";
-if (typeof window !== "undefined" && typeof window.fetch === "function") {
+const IS_LOCALHOST = typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
+if (typeof window !== "undefined" && typeof window.fetch === "function" && !IS_LOCALHOST) {
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     try {

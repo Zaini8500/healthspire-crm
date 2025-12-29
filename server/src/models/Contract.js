@@ -14,6 +14,14 @@ const ContractSchema = new mongoose.Schema(
     tax1: { type: Number, default: 0 },
     tax2: { type: Number, default: 0 },
     note: { type: String, default: "" },
+    items: [
+      {
+        name: { type: String, default: "" },
+        description: { type: String, default: "" },
+        quantity: { type: Number, default: 1 },
+        rate: { type: Number, default: 0 },
+      },
+    ],
     fileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "File" }],
   },
   { timestamps: true }

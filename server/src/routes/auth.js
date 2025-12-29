@@ -18,7 +18,7 @@ router.post("/admin/login", async (req, res) => {
     if (!identifier || !password) return res.status(400).json({ error: "Missing credentials" });
 
     const query = { $or: [{ email: identifier.toLowerCase() }, { username: identifier }] };
-    const user = await User.findOne(query).lean(false);
+    const user = await User.findOne(query).lean();
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     if (user.role !== "admin") return res.status(403).json({ error: "Unauthorized role" });
     if (user.status !== "active") {
@@ -27,8 +27,7 @@ router.post("/admin/login", async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
-      user.failedLogins = (user.failedLogins || 0) + 1;
-      await user.save().catch(()=>{});
+      await User.updateOne({ _id: user._id }, { $inc: { failedLogins: 1 } }).catch(()=>{});
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -77,7 +76,7 @@ router.post("/team/login", async (req, res) => {
 
     const identifierLc = String(identifier).toLowerCase().trim();
     const query = { $or: [{ email: identifierLc }, { username: identifier }] };
-    let user = await User.findOne(query).lean(false);
+    let user = await User.findOne(query).lean();
 
     // If user doesn't exist yet, allow employee login by email and auto-create staff User.
     if (!user) {
@@ -104,7 +103,7 @@ router.post("/team/login", async (req, res) => {
           },
         },
         { new: true, upsert: true }
-      ).lean(false);
+      ).lean();
     }
 
     if (user.role !== "admin" && user.role !== "staff") return res.status(403).json({ error: "Unauthorized role" });
@@ -121,8 +120,7 @@ router.post("/team/login", async (req, res) => {
     }
 
     if (!ok) {
-      user.failedLogins = (user.failedLogins || 0) + 1;
-      await user.save().catch(() => {});
+      await User.updateOne({ _id: user._id }, { $inc: { failedLogins: 1 } }).catch(() => {});
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -141,13 +139,16 @@ router.post("/client/login", async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: "Missing credentials" });
 
     const emailLc = String(email).toLowerCase().trim();
-    const user = await User.findOne({ email: emailLc, role: "client" }).lean(false);
+    const user = await User.findOne({ email: emailLc, role: "client" }).lean();
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
     if (user.status !== "active") return res.status(403).json({ error: "Inactive user" });
     if (!user.passwordHash) return res.status(401).json({ error: "Account not ready" });
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    if (!ok) {
+      await User.updateOne({ _id: user._id }, { $inc: { failedLogins: 1 } }).catch(() => {});
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
     const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });

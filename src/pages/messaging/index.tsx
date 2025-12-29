@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Settings, Moon, Sun, Palette, Edit3, Trash2 } from 'lucide-react';
+import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Edit3, Trash2, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { NewConversation } from './components/NewConversation';
 import { useToast } from '@/components/ui/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { useTheme } from 'next-themes';
 import EmojiPicker from 'emoji-picker-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -33,12 +32,11 @@ export default function Messaging() {
   const [newMessage, setNewMessage] = useState('');
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  // Theme is controlled globally from TopNav
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -291,25 +289,6 @@ export default function Messaging() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Messages</h2>
             <div className="flex items-center gap-1">
-              {/* Theme Toggle */}
-              <DropdownMenu open={showThemeMenu} onOpenChange={setShowThemeMenu}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setTheme("light")}>
-                    <Sun className="mr-2 h-4 w-4" /> Light
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme("dark")}>
-                    <Moon className="mr-2 h-4 w-4" /> Dark
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme("system")}>
-                    <Settings className="mr-2 h-4 w-4" /> System
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
               {role !== 'client' && (
                 <Button 
                   size="icon" 

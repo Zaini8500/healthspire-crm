@@ -1,5 +1,9 @@
 import express from "express";
 import Estimate from "../models/Estimate.js";
+import Lead from "../models/Lead.js";
+import Proposal from "../models/Proposal.js";
+import Contract from "../models/Contract.js";
+import Project from "../models/Project.js";
 import multer from "multer";
 import path from "path";
 
@@ -75,8 +79,67 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const update = req.body || {};
+    const pre = await Estimate.findById(req.params.id).lean();
     const doc = await Estimate.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!doc) return res.status(404).json({ error: "Not found" });
+
+    // If estimate accepted, perform conversions: lead -> sale, proposal -> contract, create project
+    try {
+      const becameAccepted = String(update?.status || "").toLowerCase() === "accepted" && String(pre?.status || "").toLowerCase() !== "accepted";
+      if (becameAccepted) {
+        // 1) Update lead status
+        if (doc.leadId) {
+          await Lead.findByIdAndUpdate(doc.leadId, { $set: { status: "Sale" } }).catch(() => null);
+        }
+
+        // 2) Create contract (prefer from latest proposal if exists)
+        let contract = null;
+        try {
+          let sourceTitle = `Contract for Estimate ${doc.number || doc._id}`;
+          let amount = Number(doc.amount || 0);
+          let tax1 = Number(doc.tax || 0);
+          let tax2 = Number(doc.tax2 || 0);
+          const latestProp = doc.leadId ? await Proposal.findOne({ leadId: doc.leadId }).sort({ createdAt: -1 }).lean() : null;
+          if (latestProp) {
+            sourceTitle = latestProp.title || sourceTitle;
+            amount = Number(latestProp.amount || amount);
+            tax1 = Number(latestProp.tax1 || tax1);
+            tax2 = Number(latestProp.tax2 || tax2);
+          }
+          contract = await Contract.create({
+            clientId: doc.clientId || undefined,
+            leadId: doc.leadId || undefined,
+            client: doc.client || "",
+            projectId: undefined,
+            title: sourceTitle,
+            amount,
+            contractDate: new Date(),
+            validUntil: doc.validUntil || undefined,
+            status: "Open",
+            tax1,
+            tax2,
+            note: doc.note || "",
+          });
+        } catch {}
+
+        // 3) Create project
+        try {
+          const project = await Project.create({
+            title: (doc?.note && doc.note.trim()) ? doc.note.trim().slice(0, 80) : `Project from Estimate ${doc.number || doc._id}`,
+            clientId: doc.clientId || undefined,
+            client: doc.client || "",
+            price: Number(doc.amount || 0),
+            start: new Date(),
+            deadline: doc.validUntil || undefined,
+            status: "Open",
+          });
+          if (contract && project?._id) {
+            // back-link contract to project
+            await Contract.findByIdAndUpdate(contract._id, { $set: { projectId: project._id } }).catch(() => null);
+          }
+        } catch {}
+      }
+    } catch {}
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });

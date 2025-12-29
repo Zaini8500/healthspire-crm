@@ -442,9 +442,8 @@ export default function EstimateDetail() {
         </DropdownMenu>
       </div>
 
-      <Tabs defaultValue="preview">
+      <Tabs defaultValue="details">
         <TabsList>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
           <TabsTrigger value="details">Edit</TabsTrigger>
           <TabsTrigger value="tasks">Tasks</TabsTrigger>
           <TabsTrigger value="reminders">Reminders</TabsTrigger>
@@ -594,16 +593,6 @@ export default function EstimateDetail() {
           </div>
         </TabsContent>
 
-        <TabsContent value="preview">
-          <Card className="p-2">
-            <iframe
-              title="Estimate Preview"
-              src={`/prospects/estimates/${id}/preview`}
-              className="w-full h-[80vh] border-0 rounded"
-            />
-          </Card>
-        </TabsContent>
-
         <TabsContent value="reminders">
           <Card className="p-4">
             <div className="text-sm text-muted-foreground mb-2">Reminders (Private)</div>
@@ -722,7 +711,29 @@ export default function EstimateDetail() {
             <div className="sm:col-span-9"><Input value={infoTaxId} onChange={(e)=>setInfoTaxId(e.target.value)} /></div>
 
             <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Logo URL</div>
-            <div className="sm:col-span-9"><Input value={infoLogo} onChange={(e)=>setInfoLogo(e.target.value)} /></div>
+            <div className="sm:col-span-9">
+              <div className="flex items-center gap-2">
+                <Input value={infoLogo} onChange={(e)=>setInfoLogo(e.target.value)} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      const res = await fetch(`${API_BASE}/api/estimates/upload`, { method: "POST", body: fd });
+                      const data = await res.json().catch(() => null);
+                      if (res.ok && data?.path) {
+                        setInfoLogo(data.path);
+                      }
+                    } catch {}
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </div>
+            </div>
 
             <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Payment information</div>
             <div className="sm:col-span-9"><Textarea rows={8} value={paymentInfo} onChange={(e)=>setPaymentInfo(e.target.value)} /></div>

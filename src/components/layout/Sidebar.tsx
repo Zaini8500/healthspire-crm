@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -201,21 +201,22 @@ const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].i
 const normalizeAvatarSrc = (input: string) => {
   const s = String(input || "").trim();
   if (!s || s.startsWith("<")) return "/api/placeholder/64/64";
-  try {
+      const base = (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) ? "https://healthspire-crm.onrender.com" : API_BASE;
+    try {
     const isAbs = /^https?:\/\//i.test(s);
     if (isAbs) {
       const u = new URL(s);
       if ((u.hostname === "localhost" || u.hostname === "127.0.0.1") && u.pathname.includes("/uploads/")) {
-        return `${API_BASE}${u.pathname}`;
+        return `${base}${u.pathname}`;
       }
-      if (u.pathname.includes("/uploads/")) return `${API_BASE}${u.pathname}`;
+      if (u.pathname.includes("/uploads/")) return `${base}${u.pathname}`;
       return s;
     }
     const rel = s.startsWith("/") ? s : `/${s}`;
-    return `${API_BASE}${rel}`;
+    return `${base}${rel}`;
   } catch {
     const rel = s.startsWith("/") ? s : `/${s}`;
-    return `${API_BASE}${rel}`;
+    return `${base}${rel}`;
   }
 };
 
@@ -461,3 +462,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
     </>
   );
 }
+
+
+

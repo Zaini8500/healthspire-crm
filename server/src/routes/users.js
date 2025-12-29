@@ -6,6 +6,7 @@ import { authenticate, isAdmin } from "../middleware/auth.js";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const router = Router();
@@ -326,10 +327,9 @@ router.delete("/me/avatar", authenticate, async (req, res) => {
     
     // Remove avatar file if it exists
     if (user.avatar && user.avatar.startsWith("/uploads/")) {
-      const fs = require("fs");
-      const path = require("path");
-      const filePath = path.join(__dirname, "../../..", user.avatar);
       try {
+        // Join within known uploads directory and strip any nested paths to avoid traversal
+        const filePath = path.join(uploadDir, path.basename(user.avatar));
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
@@ -354,6 +354,44 @@ router.delete("/me/avatar", authenticate, async (req, res) => {
     }
     
     res.json({ message: "Avatar removed successfully" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/fix-avatars", authenticate, async (req, res) => {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    
+    const users = await User.find({ avatar: { $exists: true, $ne: "" } }).lean();
+    let fixedCount = 0;
+    
+    for (const user of users) {
+      if (user.avatar && user.avatar.startsWith("/uploads/")) {
+        const filePath = path.join(__dirname, "../../..", user.avatar);
+        if (!fs.existsSync(filePath)) {
+          // Avatar file doesn't exist, clear the reference
+          await User.updateOne({ _id: user._id }, { $set: { avatar: "" } });
+          
+          // Also update related records
+          const role = String(user?.role || "").toLowerCase();
+          const email = String(user?.email || "").toLowerCase().trim();
+          
+          if (role === "client" && user?.clientId) {
+            await Client.updateOne({ _id: user.clientId }, { $set: { avatar: "" } }).catch(() => null);
+          }
+          
+          if (role === "staff" && email) {
+            await Employee.updateOne({ email }, { $set: { avatar: "" } }).catch(() => null);
+          }
+          
+          fixedCount++;
+        }
+      }
+    }
+    
+    res.json({ message: `Fixed ${fixedCount} missing avatar references` });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

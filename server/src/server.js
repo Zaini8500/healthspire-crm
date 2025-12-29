@@ -125,6 +125,28 @@ const UPLOAD_DIR = path.join(SERVER_ROOT, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+// Handle missing avatar files gracefully
+app.get(/^\/uploads\/avatar_user_/, (req, res) => {
+  const filePath = path.join(UPLOAD_DIR, path.basename(req.path));
+  if (!fs.existsSync(filePath)) {
+    // Return 204 No Content for missing avatars
+    res.status(204).send();
+    return;
+  }
+  res.sendFile(filePath);
+});
+
+// Handle missing employee avatar files gracefully
+app.get(/^\/uploads\/emp_/, (req, res) => {
+  const filePath = path.join(UPLOAD_DIR, path.basename(req.path));
+  if (!fs.existsSync(filePath)) {
+    // Return 204 No Content for missing avatars
+    res.status(204).send();
+    return;
+  }
+  res.sendFile(filePath);
+});
+
 app.use("/uploads", express.static(UPLOAD_DIR));
 
 app.get("/", (_req, res) => {
@@ -228,7 +250,12 @@ async function seedAdmin() {
 }
 
 mongoose
-  .connect(MONGODB_URI, { dbName: process.env.MONGODB_DB || "mindspire" })
+  .connect(MONGODB_URI, { 
+    dbName: process.env.MONGODB_DB || "mindspire",
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000
+  })
   .then(() => {
     console.log("MongoDB connected");
     (async () => {
