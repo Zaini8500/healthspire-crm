@@ -1,4 +1,6 @@
-export const API_BASE = 'http://localhost:5000';
+export const API_BASE = (typeof window !== 'undefined' && !['localhost','127.0.0.1'].includes(window.location.hostname))
+  ? 'https://healthspire-crm.onrender.com'
+  : 'http://localhost:5000';
 
 export interface Message {
   _id: string;

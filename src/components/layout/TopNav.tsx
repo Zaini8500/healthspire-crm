@@ -19,7 +19,9 @@ interface TopNavProps {
   onMenuClick: () => void;
 }
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
+  ? "https://healthspire-crm.onrender.com"
+  : "http://localhost:5000";
 
 type MeUser = {
   _id?: string;
@@ -135,6 +137,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
   };
 
   const loadNotifications = async () => {
+    if (typeof document !== "undefined" && (document as any).hidden) return;
     try {
       const headers = getAuthHeaders();
       const [countRes, listRes] = await Promise.all([
@@ -175,7 +178,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
   useEffect(() => {
     loadNotifications();
     void loadMe();
-    const t = window.setInterval(loadNotifications, 15000);
+    const t = window.setInterval(loadNotifications, 30000);
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -291,7 +294,17 @@ export function TopNav({ onMenuClick }: TopNavProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-10 px-2">
               <Avatar className="h-9 w-9">
-                <AvatarImage src={me?.avatar ? `${API_BASE}${me.avatar}` : "/api/placeholder/64/64"} />
+                <AvatarImage
+                  src={(() => {
+                    const a = String(me?.avatar || "");
+                    if (!a) return "/api/placeholder/64/64";
+                    if (a.startsWith("<")) return "/api/placeholder/64/64";
+                    if (a.startsWith("http")) return a;
+                    const rel = a.startsWith("/") ? a : `/${a}`;
+                    return `${API_BASE}${rel}`;
+                  })()}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
+                />
                 <AvatarFallback>{meInitials}</AvatarFallback>
               </Avatar>
             </Button>
@@ -300,7 +313,17 @@ export function TopNav({ onMenuClick }: TopNavProps) {
             <DropdownMenuLabel>
               <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={me?.avatar ? `${API_BASE}${me.avatar}` : "/api/placeholder/64/64"} />
+                  <AvatarImage
+                    src={(() => {
+                      const a = String(me?.avatar || "");
+                      if (!a) return "/api/placeholder/64/64";
+                      if (a.startsWith("<")) return "/api/placeholder/64/64";
+                      if (a.startsWith("http")) return a;
+                      const rel = a.startsWith("/") ? a : `/${a}`;
+                      return `${API_BASE}${rel}`;
+                    })()}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/api/placeholder/64/64"; }}
+                  />
                   <AvatarFallback>{meInitials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col min-w-0">

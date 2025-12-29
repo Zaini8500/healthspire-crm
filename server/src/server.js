@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import http from "node:http";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import contactsRouter from "./routes/contacts.js";
 import companiesRouter from "./routes/companies.js";
 import employeesRouter from "./routes/employees.js";
@@ -66,9 +67,49 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/mindspire";
 
-app.use(cors());
+// CORS configuration: allow Vercel frontend, Render preview, and local dev
+const defaultOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:5000",
+  "https://healthspire-crm.vercel.app",
+  "https://healthspire-crm.onrender.com",
+];
+const envOrigins = (process.env.CORS_ORIGINS || "")
+  .split(/[;,\s]+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set([...defaultOrigins, ...envOrigins]);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // mobile apps, curl, same-origin
+    try {
+      const url = new URL(origin);
+      const ok =
+        allowedOrigins.has(origin) ||
+        allowedOrigins.has(`${url.protocol}//${url.host}`) ||
+        url.hostname.endsWith(".vercel.app") ||
+        url.hostname.endsWith(".onrender.com") ||
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1";
+      return callback(null, ok);
+    } catch {
+      return callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "X-Requested-With",
+  ],
+  exposedHeaders: ["Content-Length", "Content-Type"],
+};
+app.use(cors(corsOptions));
 // Enable CORS preflight for all routes
-app.options("*", cors());
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "15mb" }));
 app.use(morgan("dev"));
 // Disable etag and caching for API to prevent 304 interfering with fetch()
@@ -78,11 +119,17 @@ app.use((_, res, next) => {
   next();
 });
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_ROOT = path.resolve(__dirname, "..");
+const UPLOAD_DIR = path.join(SERVER_ROOT, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 app.use("/uploads", express.static(UPLOAD_DIR));
+
+app.get("/", (_req, res) => {
+  res.json({ ok: true, name: "Healthspire API", health: "/api/health" });
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, env: process.env.NODE_ENV || "development" });
@@ -181,7 +228,7 @@ async function seedAdmin() {
 }
 
 mongoose
-  .connect(MONGODB_URI)
+  .connect(MONGODB_URI, { dbName: process.env.MONGODB_DB || "mindspire" })
   .then(() => {
     console.log("MongoDB connected");
     (async () => {

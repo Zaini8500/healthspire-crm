@@ -7,7 +7,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname))
+  ? "https://healthspire-crm.onrender.com"
+  : "http://localhost:5000";
 
 type MeResponse = {
   user?: {
@@ -41,6 +43,7 @@ export default function ProfileSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarVer, setAvatarVer] = useState(0);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -143,6 +146,7 @@ export default function ProfileSettings() {
       if (!res.ok) throw new Error((json as any)?.error || "Failed to upload avatar");
       toast.success("Avatar updated");
       await loadMe();
+      setAvatarVer(Date.now());
     } catch (e: any) {
       toast.error(e?.message || "Failed to upload avatar");
     } finally {
@@ -164,7 +168,17 @@ export default function ProfileSettings() {
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16 border">
-              <AvatarImage src={avatar ? `${API_BASE}${avatar}` : "/api/placeholder/64/64"} />
+              <AvatarImage
+                src={(() => {
+                  if (!avatar) return "/api/placeholder/64/64";
+                  const url = avatar.startsWith("http") ? avatar : `${API_BASE}${avatar}`;
+                  return avatarVer ? `${url}?v=${avatarVer}` : url;
+                })()}
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  img.src = "/api/placeholder/64/64";
+                }}
+              />
               <AvatarFallback className="text-lg">{initials}</AvatarFallback>
             </Avatar>
             <div className="space-y-1">

@@ -2,11 +2,14 @@ import { Router } from "express";
 import Client from "../models/Client.js";
 import multer from "multer";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const router = Router();
 
 // simple multer storage for avatar uploads
-const uploadDir = path.join(process.cwd(), "uploads");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_ROOT = path.resolve(__dirname, "..", "..");
+const uploadDir = path.join(SERVER_ROOT, "uploads");
 const storage = multer.diskStorage({
   destination: function (_req, _file, cb) { cb(null, uploadDir); },
   filename: function (req, file, cb) {
