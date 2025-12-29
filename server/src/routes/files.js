@@ -16,8 +16,6 @@ const storage = multer.diskStorage({
       ? `proj_${req.body.projectId}`
       : req.body.leadId
       ? `lead_${req.body.leadId}`
-      : req.body.clientId
-      ? `client_${req.body.clientId}`
       : req.body.employeeId
       ? `emp_${req.body.employeeId}`
       : "misc";
@@ -31,12 +29,14 @@ router.get("/", async (req, res) => {
   const employeeId = req.query.employeeId?.toString();
   const projectId = req.query.projectId?.toString();
   const leadId = req.query.leadId?.toString();
+  const clientId = req.query.clientId?.toString();
   const ticketId = req.query.ticketId?.toString();
   const subscriptionId = req.query.subscriptionId?.toString();
   const filter = {};
   if (employeeId) filter.employeeId = employeeId;
   if (projectId) filter.projectId = projectId;
   if (leadId) filter.leadId = leadId;
+  if (clientId) filter.clientId = clientId;
   if (ticketId) filter.ticketId = ticketId;
   if (subscriptionId) filter.subscriptionId = subscriptionId;
   if (q) filter.$or = [{ name: { $regex: q, $options: "i" } }];
@@ -53,6 +53,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       employeeId: req.body.employeeId,
       projectId: req.body.projectId,
       leadId: req.body.leadId,
+      clientId: req.body.clientId,
       ticketId: req.body.ticketId,
       subscriptionId: req.body.subscriptionId,
       name: req.body.name || req.file?.originalname || "file",

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Label } from "@/components/ui/label";
 import { Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 interface Member {
   id: string; // employee ObjectId
@@ -51,7 +52,8 @@ export default function Attendance() {
 
   const refresh = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/attendance/members`);
+      const res = await fetch(`${API_BASE}/api/attendance/members`, { headers: getAuthHeaders() });
+      if (res.status === 401) { window.location.assign('/auth'); return; }
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Member[] = (Array.isArray(data) ? data : []).map((d: any) => ({
@@ -74,7 +76,8 @@ export default function Attendance() {
       if (params.to) sp.set("to", params.to);
       if (params.employeeId) sp.set("employeeId", params.employeeId);
       const qs = sp.toString();
-      const res = await fetch(`${API_BASE}/api/attendance/records${qs ? `?${qs}` : ""}`);
+      const res = await fetch(`${API_BASE}/api/attendance/records${qs ? `?${qs}` : ""}`, { headers: getAuthHeaders() });
+      if (res.status === 401) { window.location.assign('/auth'); return; }
       if (!res.ok) {
         setRecords([]);
         return;
@@ -155,13 +158,13 @@ export default function Attendance() {
       if (clockedIn) {
         await fetch(`${API_BASE}/api/attendance/clock-out`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({ employeeId: id, name }),
         });
       } else {
         await fetch(`${API_BASE}/api/attendance/clock-in`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({ employeeId: id, name }),
         });
       }
@@ -178,7 +181,7 @@ export default function Attendance() {
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">Add time manually</Button>
             </DialogTrigger>
-            <DialogContent className="bg-card">
+            <DialogContent className="bg-card" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle>Add time manually</DialogTitle>
               </DialogHeader>
@@ -208,7 +211,7 @@ export default function Attendance() {
                   try {
                     await fetch(`${API_BASE}/api/attendance/manual`, {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
+                      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                       body: JSON.stringify({
                         name: manualName,
                         date: manualDate,
